@@ -1,17 +1,13 @@
-CC = gcc                # Compilador
-CFLAGS = -Wall -g      # Flags de compilação
+CC = gcc           # Compilador
+CFLAGS = -Wall -g  # Flags de compilação
 
-# Alvo principal: compilar o servidor e cliente
-all: server client
+# Alvo principal: compilar o servidor
+all: server
 
 # Regra para compilar o servidor
-server: src/server.c src/config.c
-	$(CC) $(CFLAGS) -o server src/server.c src/config.c
-
-# Regra para compilar o cliente
-client: src/client.c src/config.c
-	$(CC) $(CFLAGS) -o client src/client.c src/config.c
+server: src/server.c
+	$(CC) $(CFLAGS) -o server src/server.c
 
 # Limpar os ficheiros binários gerados
 clean:
-	rm -f server client
+	rm -f server
