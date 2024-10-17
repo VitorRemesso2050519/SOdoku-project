@@ -22,7 +22,9 @@ void lerConfiguracaoServidor(const char* ficheiroConfig, ConfigServidor* config)
         printf("Erro ao abrir o ficheiro de configuração!\n");
         exit(1);
     }
-    fscanf(fp, "FICHEIRO_JOGOS: %s\n", config->ficheiro_jogos);
+    
+    // Lê a linha que contém o caminho do ficheiro de jogos
+    fscanf(fp, "PATH_JOGOS: %s\n", config->ficheiro_jogos);
     fclose(fp);
 }
 
