@@ -1,30 +1,17 @@
-# Definindo variáveis
 CC = gcc                # Compilador
 CFLAGS = -Wall -g      # Flags de compilação
-SRC_DIR = src          # Diretório de código fonte
-BIN_DIR = bin          # Diretório para executáveis
 
-# Criando o diretório de binários se não existir
-$(shell mkdir -p $(BIN_DIR))
+# Alvo principal: compilar o servidor e cliente
+all: server client
 
-# Nomes dos executáveis
-EXEC_SERVER = $(BIN_DIR)/server
-EXEC_SERVIDOR = $(BIN_DIR)/servidor
+# Regra para compilar o servidor
+server: src/server.c src/config.c
+	$(CC) $(CFLAGS) -o server src/server.c src/config.c
 
-# Regra padrão para compilar todos os executáveis
-all: $(EXEC_SERVER) $(EXEC_SERVIDOR)
-
-# Regra para compilar o executável do servidor
-$(EXEC_SERVER): $(SRC_DIR)/server.c
-	$(CC) $(CFLAGS) -o $@ $<
-
-# Regra para compilar o executável do servidor
-$(EXEC_SERVIDOR): $(SRC_DIR)/servidor.c
-	$(CC) $(CFLAGS) -o $@ $<
+# Regra para compilar o cliente
+client: src/client.c src/config.c
+	$(CC) $(CFLAGS) -o client src/client.c src/config.c
 
 # Limpar os ficheiros binários gerados
 clean:
-	rm -f $(EXEC_SERVER) $(EXEC_SERVIDOR)
-
-# Regra padrão
-.PHONY: all clean
+	rm -f server client
