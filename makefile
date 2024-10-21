@@ -1,6 +1,6 @@
 # Definições
 CC = gcc                  # Compilador
-CFLAGS = -Wall -g        # Flags de compilação
+CFLAGS = -Wall -g -I$(SRC_DIR)  # Flags de compilação (inclui o diretório src para cabeçalhos)
 
 # Executáveis
 EXECUTABLE_SERVER = server
@@ -9,7 +9,6 @@ EXECUTABLE_CLIENT = client
 # Diretórios
 SRC_DIR = src
 LOG_DIR = logs
-CONFIG_DIR = config
 
 # Fontes
 SERVER_SRC = $(SRC_DIR)/server.c $(SRC_DIR)/utils.c
@@ -18,32 +17,27 @@ CLIENT_SRC = $(SRC_DIR)/client.c $(SRC_DIR)/utils.c
 # Cabeçalhos
 HEADER = $(SRC_DIR)/utils.h
 
+# Objetos
+SERVER_OBJ = $(SERVER_SRC:.c=.o)
+CLIENT_OBJ = $(CLIENT_SRC:.c=.o)
+
 # Alvo principal: compilar os executáveis
 all: $(EXECUTABLE_SERVER) $(EXECUTABLE_CLIENT)
 
 # Regra para compilar o servidor
-$(EXECUTABLE_SERVER): $(SERVER_SRC)
-	$(CC) $(CFLAGS) -o $(EXECUTABLE_SERVER) $(SERVER_SRC)
+$(EXECUTABLE_SERVER): $(SERVER_OBJ)
+	$(CC) $(CFLAGS) -o $(EXECUTABLE_SERVER) $(SERVER_OBJ)
 
 # Regra para compilar o cliente
-$(EXECUTABLE_CLIENT): $(CLIENT_SRC)
-	$(CC) $(CFLAGS) -o $(EXECUTABLE_CLIENT) $(CLIENT_SRC)
+$(EXECUTABLE_CLIENT): $(CLIENT_OBJ)
+	$(CC) $(CFLAGS) -o $(EXECUTABLE_CLIENT) $(CLIENT_OBJ)
 
-# Regra genérica para compilar arquivos .o
-%.o: %.c $(HEADERS)
+# Regra genérica para compilar arquivos .o, considerando a dependência do header
+%.o: %.c $(HEADER)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Limpar os ficheiros binários gerados
 clean:
-	rm -f $(EXECUTABLE_SERVER) $(EXECUTABLE_CLIENT)
-
-# Criar logs (caso você tenha um script de log para gerar)
-create_logs:
-	touch $(LOG_DIR)/client.log $(LOG_DIR)/server.log
-
-# Executar
-run: all create_logs
-	./$(EXECUTABLE_SERVER) $(CONFIG_DIR)/server.config &
-	./$(EXECUTABLE_CLIENT) $(CONFIG_DIR)/client.config
+	rm -f $(SERVER_OBJ) $(CLIENT_OBJ) $(EXECUTABLE_SERVER) $(EXECUTABLE_CLIENT)
 
 .PHONY: all clean run create_logs

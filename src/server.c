@@ -26,8 +26,10 @@ void lerConfiguracaoServidor(const char* ficheiroConfig, ConfigServidor* config)
         exit(1);
     }
     fscanf(fp, "PATH_JOGOS: %s\n", config->path_jogos);
-    fscanf(fp, "LOG_FILE: %s\n", config->log_file);  // Novo: adicionar ficheiro de log
+    fscanf(fp, "PATH_LOGS: %s\n", config->log_file); 
     fclose(fp);
+
+    // Print a configuração carregada para verificar
     printf("Configuração carregada: PATH_JOGOS = %s, LOG_FILE = %s\n", config->path_jogos, config->log_file);
 }
 

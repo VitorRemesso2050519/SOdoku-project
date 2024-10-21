@@ -17,16 +17,21 @@ void lerConfiguracaoCliente(const char* ficheiroConfig, ConfigCliente* config) {
         printf("Erro ao abrir o ficheiro de configuração!\n");
         exit(1);
     }
+    // Ler a configuração
     fscanf(fp, "ID_CLIENTE: %d\n", &config->id_cliente);
-    fscanf(fp, "SERVER_IP: %d\n", config->server_ip);
-    fscanf(fp, "LOG_FILE: %s\n", config->log_file); 
+    fscanf(fp, "IP_SERVIDOR: %s\n", config->server_ip);
+    fscanf(fp, "PATH_LOGS: %s\n", config->log_file);
     fclose(fp);
+
+    // Print a configuração carregada para verificar
+    printf("Configuração carregada: ID_CLIENTE = %d, SERVER_IP = %s, LOG_FILE = %s\n", 
+           config->id_cliente, config->server_ip, config->log_file);
 }
 
 // Função para simular uma tentativa de resolução
 void simularTentativa(char tabuleiro[81], char solucao[81], const char* log_file) {
     printf("Tentando resolver o Sudoku...\n");
-    log_event(log_file, "- Cliente [id] tentando resolver o Sudoku.");
+    log_event(log_file, " - Cliente [id] tentando resolver o Sudoku.");
     for (int i = 0; i < 81; i++) {
         if (tabuleiro[i] == '0') {
             tabuleiro[i] = solucao[i];  // Preencher com a solução correta
@@ -53,7 +58,6 @@ int main(int argc, char* argv[]) {
     ConfigCliente config;
     lerConfiguracaoCliente(argv[1], &config);
     log_event(config.log_file," - Configuração do cliente [id] carregada.");
-    printf("Configuração carregada: ID_CLIENTE = %d, SERVER_IP = %s, LOG_FILE = %s\n", config.id_cliente, config.server_ip, config.log_file);
 
     // Exemplo de solução correta e solução enviada pelo cliente (esta fase não envolve comunicação real)
     char solucao_correta[81] = "534678912672195348198342567859761423426853791713924856961537284287419635345286179";  // Solução correta
