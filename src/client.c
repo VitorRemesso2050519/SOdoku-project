@@ -18,9 +18,29 @@ void lerConfiguracaoCliente(const char* ficheiroConfig, ConfigCliente* config) {
         exit(1);
     }
     fscanf(fp, "ID_CLIENTE: %d\n", &config->id_cliente);
-    fscanf(fp, "SERVER_IP: %d\n", &config->server_ip);
+    fscanf(fp, "SERVER_IP: %d\n", config->server_ip);
     fscanf(fp, "LOG_FILE: %s\n", config->log_file); 
     fclose(fp);
+}
+
+// Função para simular uma tentativa de resolução
+void simularTentativa(char tabuleiro[81], char solucao[81], const char* log_file) {
+    printf("Tentando resolver o Sudoku...\n");
+    log_event(log_file, "- Cliente [id] tentando resolver o Sudoku.");
+    for (int i = 0; i < 81; i++) {
+        if (tabuleiro[i] == '0') {
+            tabuleiro[i] = solucao[i];  // Preencher com a solução correta
+            printf("Preenchendo posição %d com %c\n", i, solucao[i]);
+
+            // Registrar cada preenchimento no log
+            char log_message[64];
+            snprintf(log_message, sizeof(log_message), " - Cliente [id] preenchendo posição %d com %c", i, solucao[i]);
+            log_event(log_file, log_message);
+        }
+    }
+
+    printf("Sudoku resolvido!\n");
+    log_event(log_file, " - Sudoku do cliente [id] resolvido.");
 }
 
 int main(int argc, char* argv[]) {
@@ -32,14 +52,18 @@ int main(int argc, char* argv[]) {
     // Inicializar a configuração do cliente
     ConfigCliente config;
     lerConfiguracaoCliente(argv[1], &config);
-    log_event(config.log_file," - Configuração do cliente carregada.");
+    log_event(config.log_file," - Configuração do cliente [id] carregada.");
+    printf("Configuração carregada: ID_CLIENTE = %d, SERVER_IP = %s, LOG_FILE = %s\n", config.id_cliente, config.server_ip, config.log_file);
 
     // Exemplo de solução correta e solução enviada pelo cliente (esta fase não envolve comunicação real)
     char solucao_correta[81] = "534678912672195348198342567859761423426853791713924856961537284287419635345286179";  // Solução correta
-    char solucao_cliente[81] = "534678912672195348198342567859761423426853791713924856961537284287419635345286179";  // Solução enviada pelo cliente
+    char solucao_incompleta[81] = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";  // Solução incompleta
+
+    // Simular uma tentativa de resolução
+    simularTentativa(solucao_incompleta, solucao_correta, config.log_file);
 
     // Verificar a solução do cliente
-    log_event(config.log_file," - Verificando solução do cliente.");
+    log_event(config.log_file," - Verificando solução do cliente [id].");
 
     return 0;
 }
