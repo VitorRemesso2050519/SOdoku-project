@@ -83,7 +83,6 @@ int main(int argc, char* argv[]) {
 
     // Ler a configuração do servidor
     lerConfiguracaoServidor(argv[1], &config);
-    printf("Configuração carregada: PATH_JOGOS = %s, LOG_FILE = %s\n", config.path_jogos, config.log_file);
 
     // Carregar os jogos a partir do ficheiro de jogos especificado na configuração
     carregarJogos(config.path_jogos, jogos, &num_jogos);
@@ -98,15 +97,20 @@ int main(int argc, char* argv[]) {
     int id_jogo = 1;  // Vamos pegar no primeiro jogo para o teste
     char solucao_cliente[81] = "534678912672195348198342567859761423426853791713924856961537284287419635345286179";  // Exemplo de solução enviada pelo cliente
     
-    printf("Cliente [id] enviou a solução para o Jogo ID: %d\n", id_jogo);
+    printf("\nCliente [id] recebeu o Jogo ID: %d\n", id_jogo);
+    imprimirGrelha(jogos[id_jogo-1].tabuleiro);
+
+    printf("\nCliente [id] enviou a solução para o Jogo ID: %d\n", id_jogo);
     log_event(config.log_file, "- Cliente [id] enviou solução.");
 
     // Verificar a solução
-    if (verificarSolucao(solucao_cliente, jogos[id_jogo-1].solucao)) {
-        printf("Solução correta!\n");
+    if (verificarSolucao(solucao_cliente, jogos[id_jogo-1].solucao) == 0) {
+        printf("\nSolução correta!\n");
+        imprimirGrelha(solucao_cliente);
         log_event(config.log_file, "- Solução do cliente [id] correta.");
     } else {
-        printf("Solução incorreta!\n");
+        printf("\nSolução incorreta!\n");
+        imprimirGrelha(solucao_cliente);
         log_event(config.log_file, "- Solução do cliente [id] incorreta.");
     }
 

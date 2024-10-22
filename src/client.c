@@ -35,7 +35,7 @@ void simularTentativa(char tabuleiro[81], char solucao[81], const char* log_file
     for (int i = 0; i < 81; i++) {
         if (tabuleiro[i] == '0') {
             tabuleiro[i] = solucao[i];  // Preencher com a solução correta
-            printf("Preenchendo posição %d com %c\n", i, solucao[i]);
+            imprimirGrelha(tabuleiro);
 
             // Registrar cada preenchimento no log
             char log_message[64];
