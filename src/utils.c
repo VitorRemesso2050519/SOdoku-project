@@ -24,3 +24,14 @@ void log_event(const char* ficheiroLog, const char* evento) {
     fprintf(log_fp, "%s %s\n", time_buffer, evento);  // Write time + event
     fclose(log_fp);
 }
+
+void imprimirGrelha(const char* grelha) {
+    for (int i = 0; i < 81; i++) {
+        if (i % 27 == 0) printf("-------------------------\n");  
+        if (i % 9 == 0) printf("| ");                      
+        printf("%c ", grelha[i]);                          
+        if (i % 3 == 2) printf("| ");                      
+        if (i % 9 == 8) printf("\n");                      
+    }
+    printf("-------------------------\n");                       
+}
