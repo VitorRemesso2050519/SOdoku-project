@@ -2,8 +2,8 @@
 Projeto de SO de sudoku.
 
 O que se tem de fazer de carry-over da primeira fase:
-Um método próprio para resolver o sudoku no cliente. (Bruteforce ou outra merda).
-Um método melhor para verificar a solução do sudoku (lembro-me que ele não gostou como estava).
+- Um método próprio para resolver o sudoku no cliente. (Bruteforce ou outra merda).
+- Um método melhor para verificar a solução do sudoku (lembro-me que ele não gostou como estava).
 
 Para a segunda fase (pedido ao GPT para me ajudar a perceber onde começar):
 
