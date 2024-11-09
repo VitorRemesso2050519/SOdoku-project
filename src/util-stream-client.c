@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <stdbool.h>
 
 // Estrutura de configuração do cliente
 typedef struct {
@@ -28,24 +29,80 @@ void lerConfiguracaoCliente(const char* ficheiroConfig, ConfigCliente* config) {
            config->id_cliente, config->server_ip, config->log_file);
 }
 
-// Função para simular uma tentativa de resolução
-void simularTentativa(char tabuleiro[81], char solucao[81], const char* log_file) {
-    printf("Tentando resolver o Sudoku...\n");
-    log_event(log_file, " - Cliente [id] tentando resolver o Sudoku.");
-    for (int i = 0; i < 81; i++) {
-        if (tabuleiro[i] == '0') {
-            tabuleiro[i] = solucao[i];  // Preencher com a solução correta
-            imprimirGrelha(tabuleiro);
+// Helper function to check if placing a number in a specific cell is valid
+bool ehValido(char tabuleiro[81], int pos, char num) {
+    int row = pos / 9;
+    int col = pos % 9;
 
-            // Registrar cada preenchimento no log
-            char log_message[64];
-            snprintf(log_message, sizeof(log_message), " - Cliente [id] preenchendo posição %d com %c", i, solucao[i]);
-            log_event(log_file, log_message);
+    // Check row and column for duplicates
+    for (int i = 0; i < 9; i++) {
+        if (tabuleiro[row * 9 + i] == num || tabuleiro[i * 9 + col] == num) {
+            return false;
         }
     }
 
-    printf("Sudoku resolvido!\n");
-    log_event(log_file, " - Sudoku do cliente [id] resolvido.");
+    // Check 3x3 subgrid for duplicates
+    int startRow = row / 3 * 3;
+    int startCol = col / 3 * 3;
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            if (tabuleiro[(startRow + i) * 9 + (startCol + j)] == num) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+// Recursive brute-force function to solve the Sudoku puzzle
+bool tentarResolver(char tabuleiro[81], const char solucao[81], int pos, const char* log_file) {
+    // Base case: If we reach the end, the puzzle is solved
+    if (pos == 81) {
+        return true;
+    }
+
+    // If the cell is already filled, move to the next cell
+    if (tabuleiro[pos] != '0') {
+        return tentarResolver(tabuleiro, solucao, pos + 1, log_file);
+    }
+
+    // Try numbers 1 to 9 in the current empty cell
+    for (char num = '1'; num <= '9'; num++) {
+        if (ehValido(tabuleiro, pos, num)) {
+            tabuleiro[pos] = num;  // Place the number tentatively
+            imprimirGrelha(tabuleiro);
+
+            // Log the attempt
+            char log_message[64];
+            snprintf(log_message, sizeof(log_message), " - Cliente [id] tentando posição %d com %c", pos, num);
+            log_event(log_file, log_message);
+
+            // Recur to the next position
+            if (tentarResolver(tabuleiro, solucao, pos + 1, log_file)) {
+                return true;
+            }
+
+            // Backtrack if placing num didn't lead to a solution
+            tabuleiro[pos] = '0';
+        }
+    }
+
+    return false;  // No solution found for this path, backtrack
+}
+
+// Função para simular uma tentativa de resolução
+void simularTentativa(char tabuleiro[81], const char solucao[81], const char* log_file) {
+    printf("Tentando resolver o Sudoku...\n");
+    log_event(log_file, " - Cliente [id] tentando resolver o Sudoku.");
+
+    if (tentarResolver(tabuleiro, solucao, 0, log_file)) {
+        printf("Sudoku resolvido!\n");
+        log_event(log_file, " - Sudoku do cliente [id] resolvido.");
+    } else {
+        printf("Não foi possível resolver o Sudoku.\n");
+        log_event(log_file, " - Cliente [id] não conseguiu resolver o Sudoku.");
+    }
 }
 
 int main(int argc, char* argv[]) {
