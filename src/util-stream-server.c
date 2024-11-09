@@ -19,6 +19,8 @@ typedef struct {
     char solucao[81];    // Solução correspondente
 } Jogo;
 
+#define MAXLINE 512
+
 // Função para ler o ficheiro de configuração do servidor
 void lerConfiguracaoServidor(const char* ficheiroConfig, ConfigServidor* config) {
     FILE* fp = fopen(ficheiroConfig, "r");
@@ -104,6 +106,36 @@ const char* verificarMovimento(char tabuleiro[81], int pos, char num, const char
     // If the move is valid, update the board with the move and return success
     tabuleiro[pos] = num;
     return "Movimento válido.";
+}
+
+// Function to handle moves and validate on the server
+void str_echo(int sockfd) {
+    int n;
+    char line[MAXLINE];
+    char tabuleiro[81];          // This should be initialized to the current game board state
+    const char solucao_correta[81] = "534678912..."; // Example solution, should match the current game
+
+    for (;;) {
+        // Read move from client in the format "position,number"
+        n = readline(sockfd, line, MAXLINE);
+        if (n == 0) {
+            return;  // Connection closed by client
+        } else if (n < 0) {
+            err_dump("str_echo: readline error");
+        }
+
+        int pos;
+        char num;
+        sscanf(line, "%d,%c", &pos, &num);  // Parse the "position,number" format
+
+        // Validate the move
+        const char* feedback = verificarMovimento(tabuleiro, pos, num, solucao_correta);
+
+        // Send feedback back to the client
+        if (writen(sockfd, feedback, strlen(feedback)) != strlen(feedback)) {
+            err_dump("str_echo: writen error");
+        }
+    }
 }
 
 int main(int argc, char* argv[]) {

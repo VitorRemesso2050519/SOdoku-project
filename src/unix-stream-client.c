@@ -20,10 +20,10 @@ int main() {
     if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
         err_dump("client: can't connect to server");
 
-    // Example move loop (simulate sending moves)
-    int position = 0;
-    char number = '5';
-    snprintf(buffer, sizeof(buffer), "%d,%c", position, number);
+    // Example move (simulate sending moves)
+    int position = 0;  // Position to play
+    char number = '5'; // Number to place at that position
+    snprintf(buffer, sizeof(buffer), "%d,%c", position, number); // Format move as "position,number"
     
     // Send move to server
     if (writen(sockfd, buffer, strlen(buffer)) != strlen(buffer))
@@ -32,7 +32,7 @@ int main() {
     // Receive feedback from server
     int n = readline(sockfd, buffer, MAXLINE);
     if (n > 0) {
-        buffer[n] = '\0';
+        buffer[n] = '\0';  // Null-terminate the received feedback
         printf("Feedback from server: %s\n", buffer);
     } else if (n < 0) {
         err_dump("client: readline error");
