@@ -67,7 +67,10 @@ int verificarSolucao(const char* solucao_cliente, const char* solucao_correta) {
         }
     }
     return erros;
-}
+} 
+//ele tem que verificar a solução em certa posição segundo as regras do sudoku (não de 1 a 1)
+//ou seja, o cliente preenche um espaço e o gajo diz "não podes por aqui por causa deste numero aqui"
+//(o cliente preenche, o que foi preenchido é dito ao servidor [através do socket], e o servidor dita ao cliente se o preenchimento é correto ou não)
 
 int main(int argc, char* argv[]) {
     // Verificar se o ficheiro de configuração foi passado como argumento
@@ -75,6 +78,9 @@ int main(int argc, char* argv[]) {
         printf("Uso: %s <ficheiro_configuracao>\n", argv[0]);
         return 1;
     }
+
+    //coisas pro socket
+    //temos que verificar o que o client quer fazer
 
     // Inicializar a configuração e os jogos
     ConfigServidor config;
