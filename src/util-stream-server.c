@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <utils.h>
+#include <stdbool.h>
 
 // Definir a estrutura de configuração do servidor
 typedef struct {
@@ -57,20 +58,53 @@ void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int* num_jogos) {
     printf("%d jogos carregados com sucesso.\n", *num_jogos);
 }
 
-// Função para verificar a solução do Sudoku (simples tentativa e erro por agora)
-int verificarSolucao(const char* solucao_cliente, const char* solucao_correta) {
-    int erros = 0;
-    for (int i = 0; i < 81; i++) {
-        if (solucao_cliente[i] != solucao_correta[i]) {
-            printf("Erro na posição %d: esperado %c, obtido %c\n", i, solucao_correta[i], solucao_cliente[i]);
-            erros++;
+// Helper function to check if placing a number at a specific position is valid
+bool ehValido(const char tabuleiro[81], int pos, char num) {
+    int row = pos / 9;
+    int col = pos % 9;
+
+    // Check row and column for duplicates
+    for (int i = 0; i < 9; i++) {
+        if (tabuleiro[row * 9 + i] == num || tabuleiro[i * 9 + col] == num) {
+            return false;
         }
     }
-    return erros;
-} 
-//ele tem que verificar a solução em certa posição segundo as regras do sudoku (não de 1 a 1)
-//ou seja, o cliente preenche um espaço e o gajo diz "não podes por aqui por causa deste numero aqui"
-//(o cliente preenche, o que foi preenchido é dito ao servidor [através do socket], e o servidor dita ao cliente se o preenchimento é correto ou não)
+
+    // Check 3x3 subgrid for duplicates
+    int startRow = row / 3 * 3;
+    int startCol = col / 3 * 3;
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            if (tabuleiro[(startRow + i) * 9 + (startCol + j)] == num) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+// Server function to verify the client's move on the board
+const char* verificarMovimento(char tabuleiro[81], int pos, char num, const char solucao_correta[81]) {
+    // Check if the position is empty (i.e., '0') before validating the move
+    if (tabuleiro[pos] != '0') {
+        return "Posição já preenchida.";
+    }
+
+    // Verify that the number matches the correct solution for the position
+    if (solucao_correta[pos] != num) {
+        return "Número incorreto para esta posição.";
+    }
+
+    // Check if the move is valid according to Sudoku rules
+    if (!ehValido(tabuleiro, pos, num)) {
+        return "Número viola as regras do Sudoku (linha, coluna ou região 3x3).";
+    }
+
+    // If the move is valid, update the board with the move and return success
+    tabuleiro[pos] = num;
+    return "Movimento válido.";
+}
 
 int main(int argc, char* argv[]) {
     // Verificar se o ficheiro de configuração foi passado como argumento

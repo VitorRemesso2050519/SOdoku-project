@@ -29,32 +29,6 @@ void lerConfiguracaoCliente(const char* ficheiroConfig, ConfigCliente* config) {
            config->id_cliente, config->server_ip, config->log_file);
 }
 
-// Helper function to check if placing a number in a specific cell is valid
-bool ehValido(char tabuleiro[81], int pos, char num) {
-    int row = pos / 9;
-    int col = pos % 9;
-
-    // Check row and column for duplicates
-    for (int i = 0; i < 9; i++) {
-        if (tabuleiro[row * 9 + i] == num || tabuleiro[i * 9 + col] == num) {
-            return false;
-        }
-    }
-
-    // Check 3x3 subgrid for duplicates
-    int startRow = row / 3 * 3;
-    int startCol = col / 3 * 3;
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            if (tabuleiro[(startRow + i) * 9 + (startCol + j)] == num) {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
 // Recursive brute-force function to solve the Sudoku puzzle
 bool tentarResolver(char tabuleiro[81], const char solucao[81], int pos, const char* log_file) {
     // Base case: If we reach the end, the puzzle is solved
