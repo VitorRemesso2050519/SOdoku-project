@@ -11,8 +11,8 @@ SRC_DIR = src
 LOG_DIR = logs
 
 # Fontes
-SERVER_SRC = $(SRC_DIR)/server.c $(SRC_DIR)/utils.c
-CLIENT_SRC = $(SRC_DIR)/client.c $(SRC_DIR)/utils.c
+SERVER_SRC = $(SRC_DIR)/unix-stream-server.c $(SRC_DIR)/util-stream-server.c $(SRC_DIR)/utils.c
+CLIENT_SRC = $(SRC_DIR)/unix-stream-client.c $(SRC_DIR)/util-stream-client.c $(SRC_DIR)/utils.c
 
 # Cabeçalhos
 HEADER = $(SRC_DIR)/utils.h
