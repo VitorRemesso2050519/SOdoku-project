@@ -1,0 +1,90 @@
+#include <stdio.h>
+#include <time.h>
+
+void display_server_status(int client_count, int active_games, int resolved_games) {
+    printf("\n==== Sudoku Server Status ====\n");
+    printf("Connected Clients: %d\n", client_count);
+    printf("Active Games: %d\n", active_games);
+    printf("Resolved Games: %d\n", resolved_games);
+    printf("-------------------------------\n");
+}
+
+
+
+void log_event(const char *event) {
+    FILE *log_file = fopen("server.log", "a");
+    if (log_file == NULL) {
+        perror("Error opening log file");
+        return;
+    }
+
+    time_t now = time(NULL);
+    char *timestamp = ctime(&now);
+    timestamp[strlen(timestamp) - 1] = '\0'; // Remove newline character
+
+    fprintf(log_file, "[%s] %s\n", timestamp, event);
+    fclose(log_file);
+
+    // Also print to console for real-time monitoring
+    printf("[LOG] %s\n", event);
+}
+
+
+void handle_admin_commands() {
+    char command[256];
+    while (1) {
+        printf("Server> ");
+        fgets(command, sizeof(command), stdin);
+        command[strcspn(command, "\n")] = 0; // Remove newline character
+
+        if (strcmp(command, "show_clients") == 0) {
+            // Call function to display connected clients
+            printf("Displaying connected clients...\n");
+        } else if (strcmp(command, "show_games") == 0) {
+            // Call function to display active and resolved games
+            printf("Displaying game statistics...\n");
+        } else if (strcmp(command, "shutdown") == 0) {
+            printf("Shutting down server...\n");
+            break; // Exit loop to shut down server
+        } else {
+            printf("Unknown command: %s\n", command);
+        }
+    }
+}
+
+
+int accept_client(int server_fd) {
+    struct sockaddr_in client_addr;
+    socklen_t addr_len = sizeof(client_addr);
+    int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &addr_len);
+    if (client_fd < 0) {
+        perror("Failed to accept client connection");
+        return -1;
+    }
+    printf("New client connected.\n");
+    return client_fd;
+}
+
+
+void *client_handler(void *arg) {
+    int client_fd = *(int*)arg;
+    // Handle client requests here
+    close(client_fd);
+    return NULL;
+}
+
+
+//vamos ter de criar uma destas para cada Cliente
+pthread_t thread_id;
+pthread_create(&thread_id, NULL, client_handler, (void*)&client_fd);
+
+
+void send_message(int socket, const char *message) {
+    send(socket, message, strlen(message), 0);
+}
+
+void receive_message(int socket, char *buffer, size_t size) {
+    recv(socket, buffer, size - 1, 0);
+    buffer[size - 1] = '\0'; // Null-terminate the string
+}
+

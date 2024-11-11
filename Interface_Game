@@ -1,4 +1,5 @@
-void show_menu() {
+void show_menu() { //Chamar no loop principal para exibir o menu 
+                  //antes de aceitar a entrada do usuário.
     printf("==== Sudoku Client ====\n");
     printf("1. Request a new game\n");
     printf("2. Submit solution\n");
@@ -7,7 +8,8 @@ void show_menu() {
     printf("Select an option: ");
 }
 
-void display_board(int board[9][9]) {
+void display_board(int board[9][9]) { //após receber um quadro Sudoku do servidor
+                                    // ou após qualquer atualização do quadro.
     printf("\n    1 2 3   4 5 6   7 8 9\n");
     printf("  -------------------------\n");
     for (int i = 0; i < 9; i++) {
@@ -21,7 +23,8 @@ void display_board(int board[9][9]) {
     }
 }
 
-void get_solution_input(int *row, int *col, int *value) {
+void get_solution_input(int *row, int *col, int *value) {// Solicita e valida a entrada do usuário 
+                                                    //para uma jogada de Sudoku.
     do {
         printf("Enter row (1-9), column (1-9), and value (1-9): ");
         

@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "interface_game": "cpp"
+        "interface_game": "cpp",
+        "interface_server": "cpp"
     }
 }
