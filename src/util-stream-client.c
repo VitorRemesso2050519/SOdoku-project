@@ -66,16 +66,16 @@ bool tentarResolver(char tabuleiro[81], const char solucao[81], int pos, const c
 }
 
 // Função para simular uma tentativa de resolução
-void simularTentativa(char tabuleiro[81], const char solucao[81], const char* log_file) {
+void simularTentativa(char tabuleiro[81], const char solucao[81], const char* log_file, const ConfigCliente config) {
     printf("Tentando resolver o Sudoku...\n");
-    log_event(log_file, " - Cliente [id] tentando resolver o Sudoku.");
+    log_event(log_file, " - Cliente %d tentando resolver o Sudoku.", config.id_cliente);
 
     if (tentarResolver(tabuleiro, solucao, 0, log_file)) {
         printf("Sudoku resolvido!\n");
-        log_event(log_file, " - Sudoku do cliente [id] resolvido.");
+        log_event(log_file, " - Sudoku do cliente %d resolvido.", config.id_cliente);
     } else {
         printf("Não foi possível resolver o Sudoku.\n");
-        log_event(log_file, " - Cliente [id] não conseguiu resolver o Sudoku.");
+        log_event(log_file, " - Cliente %d não conseguiu resolver o Sudoku.", config.id_cliente);
     }
 }
 
