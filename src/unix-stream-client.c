@@ -1,66 +1,88 @@
+
 #include "unix.h"
-#include "utils.h"
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
-int start_game(int sockfd) {
-    int code = CODE_START_GAME;
-    return writen(sockfd, &code, sizeof(code));  // Send start game request
-}
+#define BUFFER_SIZE 256
 
-int submit_move(int sockfd, int position, char number) {
-    int code = CODE_SUBMIT_MOVE;
-    char buffer[MAXLINE];
-    // Format message: code | position | number
-    snprintf(buffer, sizeof(buffer), "%d,%d,%c", code, position, number);
-    return writen(sockfd, buffer, strlen(buffer));  // Send move request with code
-}
+void send_message(int client_socket, int code) {
+    // Send the code to the server
+    if (send(client_socket, &code, sizeof(code), 0) == -1) {
+        perror("Failed to send message to server");
+        exit(EXIT_FAILURE);
+    }
 
-int quit_game(int sockfd) {
-    int code = CODE_QUIT_GAME;
-    return writen(sockfd, &code, sizeof(code));  // Send quit game request
+    // Receive a response from the server
+    int response_code;
+    if (recv(client_socket, &response_code, sizeof(response_code), 0) == -1) {
+        perror("Failed to receive response from server");
+        exit(EXIT_FAILURE);
+    }
+
+    // Interpret the server's response
+    switch (response_code) {
+        case CODE_RESPONSE_OK:
+            printf("Server responded with OK.\n");
+            break;
+        case CODE_RESPONSE_ERROR:
+            printf("Server responded with ERROR.\n");
+            break;
+        default:
+            printf("Unknown response code received from server: %d\n", response_code);
+            break;
+    }
 }
 
 int main() {
-    int sockfd;
-    struct sockaddr_un serv_addr;
-    char buffer[MAXLINE];
+    int client_socket;
+    struct sockaddr_un server_addr;
 
-    // Create UNIX domain stream socket
-    if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0)
-        err_dump("client: can't open stream socket");
-
-    // Configure server address
-    bzero((char *)&serv_addr, sizeof(serv_addr));
-    serv_addr.sun_family = AF_UNIX;
-    strcpy(serv_addr.sun_path, UNIXSTR_PATH);
-
-    // Connect to the server
-    if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-        err_dump("client: can't connect to server");
-
-    // Start the game
-    if (start_game(sockfd) <= 0)
-        err_dump("client: start_game error");
-
-    // Submit a move as an example
-    int position = 0;
-    char number = '5';
-    if (submit_move(sockfd, position, number) <= 0)
-        err_dump("client: submit_move error");
-
-    // Receive feedback from server
-    int n = readline(sockfd, buffer, MAXLINE);
-    if (n > 0) {
-        buffer[n] = '\0';
-        printf("Feedback from server: %s\n", buffer);
-    } else if (n < 0) {
-        err_dump("client: readline error");
+    // Create a UNIX domain socket
+    if ((client_socket = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+        perror("Failed to create socket");
+        exit(EXIT_FAILURE);
     }
 
-    // Quit the game
-    if (quit_game(sockfd) <= 0)
-        err_dump("client: quit_game error");
+    // Set up the server address structure
+    memset(&server_addr, 0, sizeof(struct sockaddr_un));
+    server_addr.sun_family = AF_UNIX;
+    strncpy(server_addr.sun_path, UNIXSTR_PATH, sizeof(server_addr.sun_path) - 1);
 
-    close(sockfd);
+    // Connect to the server
+    if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(struct sockaddr_un)) == -1) {
+        perror("Failed to connect to server");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Connected to the server.\n");
+
+    // Example client interaction
+    int command;
+    printf("Enter command (1: Start Game, 2: Submit Move, 3: Quit Game): ");
+    scanf("%d", &command);
+
+    switch (command) {
+        case 1:
+            send_message(client_socket, CODE_START_GAME);
+            break;
+        case 2:
+            send_message(client_socket, CODE_SUBMIT_MOVE);
+            break;
+        case 3:
+            send_message(client_socket, CODE_QUIT_GAME);
+            break;
+        default:
+            printf("Invalid command.\n");
+            break;
+    }
+
+    // Close the client socket
+    close(client_socket);
+    printf("Disconnected from the server.\n");
+
     return 0;
 }
