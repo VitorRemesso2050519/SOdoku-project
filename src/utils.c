@@ -13,7 +13,7 @@ void get_current_time(char* buffer, size_t size) {
     strftime(buffer, size, "[%H:%M:%S]", time_info);  // Formato: [HH:MM:SS]
 }
 
-void log_event(const char* ficheiroLog, const char* evento) {
+void log_event(const char* ficheiroLog, int user_id, int event_code, const char* description) {
     FILE* log_fp = fopen(ficheiroLog, "a");  // Open in append mode
     if (log_fp == NULL) {
         perror("Erro ao abrir o ficheiro de log");
@@ -21,7 +21,7 @@ void log_event(const char* ficheiroLog, const char* evento) {
     }
     char time_buffer[20];
     get_current_time(time_buffer, sizeof(time_buffer));
-    fprintf(log_fp, "%s %s\n", time_buffer, evento);  // Write time + event
+    fprintf(log_fp, "%d %s %d \"%s\"\n", user_id, time_buffer, event_code, description);
     fclose(log_fp);
 }
 

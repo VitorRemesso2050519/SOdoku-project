@@ -29,8 +29,43 @@ void lerConfiguracaoCliente(const char* ficheiroConfig, ConfigCliente* config) {
            config->id_cliente, config->server_ip, config->log_file);
 }
 
+// Helper function to check if placing a number at a specific position is valid
+bool ehValido(const char tabuleiro[81], int pos, char num) {
+    int row = pos / 9;
+    int col = pos % 9;
+
+    // Check row and column for duplicates
+    for (int i = 0; i < 9; i++) {
+        if (tabuleiro[row * 9 + i] == num || tabuleiro[i * 9 + col] == num) {
+            return false;
+        }
+    }
+
+    // Check 3x3 subgrid for duplicates
+    int startRow = row / 3 * 3;
+    int startCol = col / 3 * 3;
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            if (tabuleiro[(startRow + i) * 9 + (startCol + j)] == num) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+void shuffle(char *array, int n) {
+    for (int i = n - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        char temp = array[i];
+        array[i] = array[j];
+        array[j] = temp;
+    }
+}
+
 // Recursive brute-force function to solve the Sudoku puzzle
-bool tentarResolver(char tabuleiro[81], const char solucao[81], int pos, const char* log_file) {
+bool tentarResolver(char tabuleiro[81], const char solucao[81], int pos, const char* log_file, const ConfigCliente config) {
     // Base case: If we reach the end, the puzzle is solved
     if (pos == 81) {
         return true;
@@ -38,22 +73,27 @@ bool tentarResolver(char tabuleiro[81], const char solucao[81], int pos, const c
 
     // If the cell is already filled, move to the next cell
     if (tabuleiro[pos] != '0') {
-        return tentarResolver(tabuleiro, solucao, pos + 1, log_file);
+        return tentarResolver(tabuleiro, solucao, pos + 1, log_file, config);
     }
 
-    // Try numbers 1 to 9 in the current empty cell
-    for (char num = '1'; num <= '9'; num++) {
+    // Initialize and shuffle numbers 1 to 9
+    char shuffledNums[9] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
+    shuffle(shuffledNums, 9);
+
+    // Try numbers in the shuffled order in the current empty cell
+    for (int i = 0; i < 9; i++) {
+        char num = shuffledNums[i];
         if (ehValido(tabuleiro, pos, num)) {
             tabuleiro[pos] = num;  // Place the number tentatively
             imprimirGrelha(tabuleiro);
 
             // Log the attempt
             char log_message[64];
-            snprintf(log_message, sizeof(log_message), " - Cliente [id] tentando posição %d com %c", pos, num);
+            snprintf(log_message, sizeof(log_message), " - Cliente %d tentando posição %d com %c", config.id_cliente, pos, num);
             log_event(log_file, log_message);
 
             // Recur to the next position
-            if (tentarResolver(tabuleiro, solucao, pos + 1, log_file)) {
+            if (tentarResolver(tabuleiro, solucao, pos + 1, log_file, config)) {
                 return true;
             }
 
@@ -79,7 +119,7 @@ void simularTentativa(char tabuleiro[81], const char solucao[81], const char* lo
     }
 }
 
-int main(int argc, char* argv[]) {
+/*int main(int argc, char* argv[]) {
     if (argc < 2) {
         printf("Uso: %s <ficheiro_configuracao>\n", argv[0]);
         return 1;
@@ -95,10 +135,10 @@ int main(int argc, char* argv[]) {
     char solucao_incompleta[81] = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";  // Solução incompleta
 
     // Simular uma tentativa de resolução
-    simularTentativa(solucao_incompleta, solucao_correta, config.log_file);
+    simularTentativa(solucao_incompleta, solucao_correta, config.log_file, config);
 
     // Verificar a solução do cliente
     log_event(config.log_file," - Verificando solução do cliente [id].");
 
     return 0;
-}
+}*/

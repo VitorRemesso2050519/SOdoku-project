@@ -7,7 +7,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#define BUFFER_SIZE 256
+#define BUFFER_SIZE 512
 
 void send_message(int client_socket, int code) {
     // Send the code to the server
@@ -25,16 +25,46 @@ void send_message(int client_socket, int code) {
 
     // Interpret the server's response
     switch (response_code) {
-        case CODE_RESPONSE_OK:
-            printf("Server responded with OK.\n");
+        case CODE_RESPONSE_NEW_GAME:
+            printf("Server has given you a new game.\n");
             break;
-        case CODE_RESPONSE_ERROR:
-            printf("Server responded with ERROR.\n");
+        case CODE_RESPONSE_GAME_STATE:
+            printf("Server has sent you the current game state.\n");
             break;
+        case CODE_RESPONSE_DISCONNECT:
+            printf("Server has disconnected you.\n");
+            break;
+        case CODE_RESPONSE_STATS:
+            printf("Server has sent you the game statistics.\n");
+            break;
+        code CODE_RESPONSE_INCORRECT_PARTIAL:
+            printf("Incorrect partial solution.\n");
+            break;
+        code CODE_RESPONSE_CORRECT_PARTIAL:
+            printf("Correct partial solution.\n");
+            break;
+        code CODE_RESPONSE_INCORRECT_FINAL:
+            printf("Incorrect final solution.\n");
+            break;    
+        code CODE_RESPONSE_CORRECT_FINAL:
+            printf("Correct final solution.\n");
+            break;
+        
         default:
             printf("Unknown response code received from server: %d\n", response_code);
             break;
     }
+}
+
+void display_menu() {
+    printf("\n========== Sudoku Client Interface ==========\n");
+    printf("1: Request New Game\n");
+    printf("2: Request Current Game State\n");
+    printf("3: Send Partial Solution\n");
+    printf("4: Send Final Solution\n");
+    printf("5: Request Game Statistics\n");
+    printf("6: Disconnect\n");
+    printf("=============================================\n");
 }
 
 int main() {
@@ -60,24 +90,35 @@ int main() {
 
     printf("Connected to the server.\n");
 
-    // Example client interaction
     int command;
-    printf("Enter command (1: Start Game, 2: Submit Move, 3: Quit Game): ");
-    scanf("%d", &command);
 
-    switch (command) {
-        case 1:
-            send_message(client_socket, CODE_START_GAME);
-            break;
-        case 2:
-            send_message(client_socket, CODE_SUBMIT_MOVE);
-            break;
-        case 3:
-            send_message(client_socket, CODE_QUIT_GAME);
-            break;
-        default:
-            printf("Invalid command.\n");
-            break;
+    while (1) {
+        display_menu();
+        printf("Enter command number (1-6): ");
+        scanf("%d", &command);
+        switch (command) {
+            case 1:
+                send_message(client_socket, CODE_REQUEST_NEW_GAME);
+                break;
+            case 2:
+                send_message(client_socket, CODE_REQUEST_GAME_STATE);
+                break;
+            case 3:
+                send_message(client_socket, CODE_REQUEST_STATS);
+                break;
+            case 4:
+                send_message(client_socket, CODE_SEND_PARTIAL_SOLUTION);
+                break;
+            case 5:
+                send_message(client_socket, CODE_SEND_FINAL_SOLUTION);
+                break;
+            case 6:
+                send_message(client_socket, CODE_DISCONNECT);
+                break;
+            default:
+                send_message(client_socket, CODE_RESPONSE_INVALID_COMMAND);
+                break;
+        }
     }
 
     // Close the client socket
