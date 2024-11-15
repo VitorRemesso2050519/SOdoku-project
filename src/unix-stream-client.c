@@ -1,5 +1,6 @@
 
 #include "unix.h"
+#include "util-stream-client.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,12 +38,12 @@ void send_message(int client_socket, int code) {
         case CODE_RESPONSE_STATS:
             printf("Server has sent you the game statistics.\n");
             break;
-        code CODE_RESPONSE_INCORRECT_PARTIAL:
+        /*code CODE_RESPONSE_INCORRECT_PARTIAL:
             printf("Incorrect partial solution.\n");
             break;
         code CODE_RESPONSE_CORRECT_PARTIAL:
             printf("Correct partial solution.\n");
-            break;
+            break;*/
         code CODE_RESPONSE_INCORRECT_FINAL:
             printf("Incorrect final solution.\n");
             break;    
@@ -59,12 +60,14 @@ void send_message(int client_socket, int code) {
 void display_menu() {
     printf("\n========== Sudoku Client Interface ==========\n");
     printf("1: Request New Game\n");
-    printf("2: Request Current Game State\n");
-    printf("3: Send Partial Solution\n");
-    printf("4: Send Final Solution\n");
-    printf("5: Request Game Statistics\n");
-    printf("6: Disconnect\n");
+    printf("2: View Current Game\n");
+    //In View Current Game, it will show the screen. Each input will have some type of wait, like half a second.
+    //"User" will be able to stop the game by sending solution, may it be full or partial.
+    //Client will send string with info: code, client id, game id, how many numbers to verify, numbers, positions.
+    printf("3: Request Current Game Statistics\n");
+    printf("4: Request Client Statistics\n")
     printf("=============================================\n");
+    printf("Enter command number (1-4) or 0 to disconnect: ");
 }
 
 int main() {
@@ -94,25 +97,21 @@ int main() {
 
     while (1) {
         display_menu();
-        printf("Enter command number (1-6): ");
         scanf("%d", &command);
         switch (command) {
             case 1:
                 send_message(client_socket, CODE_REQUEST_NEW_GAME);
                 break;
             case 2:
-                send_message(client_socket, CODE_REQUEST_GAME_STATE);
+                //send_message(client_socket, CODE_SEND_FINAL_SOLUTION);
                 break;
             case 3:
                 send_message(client_socket, CODE_REQUEST_STATS);
                 break;
             case 4:
-                send_message(client_socket, CODE_SEND_PARTIAL_SOLUTION);
+                //This one just gets info from the client.config file, makes sense right?
                 break;
-            case 5:
-                send_message(client_socket, CODE_SEND_FINAL_SOLUTION);
-                break;
-            case 6:
+            case 0:
                 send_message(client_socket, CODE_DISCONNECT);
                 break;
             default:
