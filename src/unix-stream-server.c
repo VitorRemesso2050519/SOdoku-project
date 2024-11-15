@@ -10,7 +10,6 @@
 #include <sys/un.h>
 
 #define BUFFER_SIZE 512
-#define MAX_CLIENTS 10
 
 ConfigServidor config;
 
@@ -34,7 +33,7 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
         }
 
         int action_code, client_id;
-        sscanf(buffer, "%d %d", &action_code, &client_id);  // Example: "1 123 ..." means action code 1, client_id 123
+        sscanf(buffer, "%d %d", &action_code, &client_id);
 
         switch (action_code) {
             case CODE_REQUEST_NEW_GAME:
@@ -43,11 +42,11 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                 // Fetch a random game from the available list
                 Jogo new_game = grabRandomGame(jogos, num_jogos);  // Helper method to fetch a new game
 
-                snprintf(buffer, BUFFER_SIZE, "%d %d %c", CODE_RESPONSE_NEW_GAME, client_id, new_game.tabuleiro);
+                snprintf(buffer, BUFFER_SIZE, "%d %d %c", CODE_RESPONSE_NEW_GAME, client_id, new_game.id_jogo, new_game.tabuleiro);
 
-                log_event(config.log_file, request.id_cliente, CODE_RESPONSE_NEW_GAME, "Server responded with a new game.");
+                log_event(config.log_file, client_id, CODE_RESPONSE_NEW_GAME, "Server responded with a new game.");
                 break;
-            case CODE_SEND_PARTIAL_SOLUTION:
+            /*case CODE_SEND_PARTIAL_SOLUTION:
                 log_event(config.log_file, client_id, CODE_SEND_PARTIAL_SOLUTION, "Client submitted a partial solution.");
 
                 int game_id;
@@ -57,7 +56,7 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                 sscanf(buffer + 4, "%d %d %d %d", game_id, n_posicoes, posicoes[n_posicoes+1], numeros[n_posicoes+1]);
 
                 Jogo *game = &jogos[game_id];
-                //Continuar aqui.
+                //Continuar aqui.*/
 
             case CODE_SEND_FINAL_SOLUTION:
                 log_event(config.log_file, client_id, CODE_SEND_FINAL_SOLUTION, "Client submitted the final solution.");
@@ -84,22 +83,13 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
             default:
                 log_event(config.log_file, request.id_cliente, request.code, "Client sent an invalid command.");
                 response.code = CODE_RESPONSE_INVALID_COMMAND;
-                og_event(config.log_file, request.id_cliente, CODE_RESPONSE_INVALID_COMMAND, "Server responded with an invalid command.");
+                log_event(config.log_file, request.id_cliente, CODE_RESPONSE_INVALID_COMMAND, "Server responded with an invalid command.");
                 break;
         }
 
         send(client_socket, buffer, strlen(buffer), 0);
     }
 
-}
-
-void *client_thread(void *arg) {
-    int client_socket = *(int *)arg;
-    free(arg);
-
-    handle_client(client_socket, num_jogos, jogos); // Pass additional needed arguments
-
-    return NULL;
 }
 
 int main(int argc, char* argv[]) {
@@ -148,25 +138,17 @@ int main(int argc, char* argv[]) {
     // Main server loop
     while (1) {
         // Accept a new client connection
-        int *client_sock_ptr = malloc(sizeof(int));
-        *client_sock_ptr = accept(server_socket, (struct sockaddr *)&client_addr, &addr_len);
-        if (*client_sock_ptr < 0) {
+        int client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &addr_len);
+        if (client_socket < 0) {
             perror("accept failed");
-            free(client_sock_ptr);
             continue;
         }
 
-        // Create a new thread to handle this client
-        pthread_t thread_id;
-        if (pthread_create(&thread_id, NULL, client_thread, client_sock_ptr) != 0) {
-            perror("pthread_create failed");
-            close(*client_sock_ptr);
-            free(client_sock_ptr);
-            continue;
-        }
+        // Handle the client connection
+        handle_client(client_socket, num_jogos, jogos);
 
-        // Detach the thread to handle its own resources
-        pthread_detach(thread_id);
+        // Close the client socket
+        close(client_socket);
     }
 
     // Close the server socket

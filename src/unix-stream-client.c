@@ -27,7 +27,7 @@ void send_message(int client_socket, int code) {
     // Interpret the server's response
     switch (response_code) {
         case CODE_RESPONSE_NEW_GAME:
-            printf("Server has given you a new game.\n");
+            //starts solving the game
             break;
         case CODE_RESPONSE_GAME_STATE:
             printf("Server has sent you the current game state.\n");
@@ -38,17 +38,11 @@ void send_message(int client_socket, int code) {
         case CODE_RESPONSE_STATS:
             printf("Server has sent you the game statistics.\n");
             break;
-        /*code CODE_RESPONSE_INCORRECT_PARTIAL:
-            printf("Incorrect partial solution.\n");
-            break;
-        code CODE_RESPONSE_CORRECT_PARTIAL:
-            printf("Correct partial solution.\n");
-            break;*/
         code CODE_RESPONSE_INCORRECT_FINAL:
-            printf("Incorrect final solution.\n");
+            //Client will have to try again
             break;    
         code CODE_RESPONSE_CORRECT_FINAL:
-            printf("Correct final solution.\n");
+            //Client chilling.
             break;
         
         default:

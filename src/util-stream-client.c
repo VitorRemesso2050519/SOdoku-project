@@ -64,61 +64,6 @@ void shuffle(char *array, int n) {
     }
 }
 
-// Recursive brute-force function to solve the Sudoku puzzle
-bool tentarResolver(char tabuleiro[81], const char solucao[81], int pos, const char* log_file, const ConfigCliente config) {
-    // Base case: If we reach the end, the puzzle is solved
-    if (pos == 81) {
-        return true;
-    }
-
-    // If the cell is already filled, move to the next cell
-    if (tabuleiro[pos] != '0') {
-        return tentarResolver(tabuleiro, solucao, pos + 1, log_file, config);
-    }
-
-    // Initialize and shuffle numbers 1 to 9
-    char shuffledNums[9] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
-    shuffle(shuffledNums, 9);
-
-    // Try numbers in the shuffled order in the current empty cell
-    for (int i = 0; i < 9; i++) {
-        char num = shuffledNums[i];
-        if (ehValido(tabuleiro, pos, num)) {
-            tabuleiro[pos] = num;  // Place the number tentatively
-            imprimirGrelha(tabuleiro);
-
-            // Log the attempt
-            char log_message[64];
-            snprintf(log_message, sizeof(log_message), " - Cliente %d tentando posição %d com %c", config.id_cliente, pos, num);
-            log_event(log_file, log_message);
-
-            // Recur to the next position
-            if (tentarResolver(tabuleiro, solucao, pos + 1, log_file, config)) {
-                return true;
-            }
-
-            // Backtrack if placing num didn't lead to a solution
-            tabuleiro[pos] = '0';
-        }
-    }
-
-    return false;  // No solution found for this path, backtrack
-}
-
-// Função para simular uma tentativa de resolução
-void simularTentativa(char tabuleiro[81], const char solucao[81], const char* log_file, const ConfigCliente config) {
-    printf("Tentando resolver o Sudoku...\n");
-    log_event(log_file, " - Cliente %d tentando resolver o Sudoku.", config.id_cliente);
-
-    if (tentarResolver(tabuleiro, solucao, 0, log_file)) {
-        printf("Sudoku resolvido!\n");
-        log_event(log_file, " - Sudoku do cliente %d resolvido.", config.id_cliente);
-    } else {
-        printf("Não foi possível resolver o Sudoku.\n");
-        log_event(log_file, " - Cliente %d não conseguiu resolver o Sudoku.", config.id_cliente);
-    }
-}
-
 /*int main(int argc, char* argv[]) {
     if (argc < 2) {
         printf("Uso: %s <ficheiro_configuracao>\n", argv[0]);
