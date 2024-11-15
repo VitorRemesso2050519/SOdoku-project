@@ -1,145 +1,105 @@
 #include "unix.h"
+#include "util-stream-server.h"
 #include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
 #define BUFFER_SIZE 512
+#define MAX_CLIENTS 10
 
 ConfigServidor config;
 
-typedef struct {
-    int code;
-    int id_cliente;
-    int id_jogo;
-    char tabuleiro[81];
-} ServerResponse;
-
-typedef struct {
-    int code;
-    int id_cliente;
-    int id_jogo;
-    char solucaoCliente[81];
-} ClientRequest;
-
-typedef struct {
-    int code;
-    int id_jogo;
-    char tabuleiro[81];    // Grelha 9x9 linearizada
-    char solucao[81];      // Solução correspondente
-    int attempts;          // Number of solution attempts made by the client.
-    time_t start_time;     // When the client started the game.
-    time_t end_time;       // When the client completed the game.
-} JogoState;
-
 void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
-    int code;
     char buffer[BUFFER_SIZE];
-    ClientRequest request;
-    ServerResponse response;
-    JogoState game_state;
 
-    log_event(config.log_file, user_id, CODE_NEW_CLIENT, "Client connected");
-
-    // Receive a message code from the client
-    int bytes_received = recv(client_socket, &request, sizeof(ClientRequest), 0);
-    if (bytes_received <= 0) {
-        perror("Failed to receive client request");
-        return;
-    }
-
-    switch (request.code) {
-        case CODE_REQUEST_NEW_GAME:
-            printf("Client requested a new game.\n");
-
-            // Fetch a random game from the available list
-            Jogo new_game = grabRandomGame(jogos, num_jogos);  // Helper method to fetch a new game
-            game_state = initialize_game_state(request.id_cliente, new_game); // Initialize game state (not done yet)
-
-            // Populate the ServerResponse struct with the game information
-            response.code = CODE_RESPONSE_NEW_GAME;
-            response.id_cliente = request.id_cliente;
-            response.id_jogo = game_state.id_jogo;
-            strncpy(response.tabuleiro, game_state.tabuleiro, 81);
-
-            // Send the response with the new game to the client
-            send(client_socket, &response, sizeof(ServerResponse), 0);
-            break;
-        case CODE_REQUEST_GAME_STATE:
-            printf("Client requested game state.\n");
-            // Send the current game state to the client
-            ServerResponse response;
-            response.code = CODE_RESPONSE_GAME_STATE;
-            response.id_cliente = 0;
-            response.id_jogo = 0;
-            response.tabuleiro = NULL;
-            send(client_socket, &code, sizeof(code), 0);
-            break;
-        case CODE_SEND_PARTIAL_SOLUTION:
-            printf("Client submitted a partial solution.\n");
-
-            // Fetch the game state for this client and game
-            game_state = find_game_state(request.id_jogo, request.id_cliente); // Helper to locate game state
-
-            // Update the current board state in game_state with partial solution
-            memcpy(game_state.tabuleiro, request.solucaoCliente, 81);  // Update board state
-            game_state.attempts++;
-
-            // Populate the response with a success code
-            response.code = CODE_RESPONSE_PARTIAL_OK;
-            response.id_cliente = request.id_cliente;
-            response.id_jogo = request.id_jogo;
-
-            send(client_socket, &response, sizeof(ServerResponse), 0);
-            break;
-        case CODE_SEND_FINAL_SOLUTION:
-            printf("Client submitted a final solution.\n");
-
-            // Retrieve the game state to compare the solution
-            game_state = find_game_state(request.id_jogo, request.id_cliente);
-
-            // Check if the submitted solution matches the correct one
-            if (verificarJogoCompleto(request.solucaoCliente, game_state.solucao)) {  // Helper for verification
-                response.code = CODE_RESPONSE_CORRECT_FINAL;
-                game_state.solved = 1;
-                game_state.end_time = time(NULL);  // Record completion time
+    while (1) {
+        // Receive the client's message as a string
+        ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+        if (bytes_received <= 0) {
+            // Client has disconnected or there was an error
+            if (bytes_received == 0) {
+                // Client disconnected gracefully
+                log_event(config.log_file, client_id, CODE_DISCONNECT, "Client disconnected.");
             } else {
-                response.code = CODE_RESPONSE_INCORRECT_FINAL;
+                // An error occurred
+                perror("recv failed");
             }
+            close(client_socket);  // Clean up the socket
+            return;
+        }
 
-            response.id_cliente = request.id_cliente;
-            response.id_jogo = request.id_jogo;
-            send(client_socket, &response, sizeof(ServerResponse), 0);
-            break;
-        case CODE_REQUEST_STATS:
-            printf("Client requested game statistics.\n");
+        int action_code, client_id;
+        sscanf(buffer, "%d %d", &action_code, &client_id);  // Example: "1 123 ..." means action code 1, client_id 123
 
-            // Populate the response with game statistics; for example:
-            response.code = CODE_RESPONSE_STATS;
-            response.id_cliente = request.id_cliente;
-            response.id_jogo = request.id_jogo;
-            snprintf(response.tabuleiro, sizeof(response.tabuleiro),
-                     "Attempts: %d, Start: %ld, End: %ld", 
-                     game_state.attempts, game_state.start_time, game_state.end_time);
+        switch (action_code) {
+            case CODE_REQUEST_NEW_GAME:
+                log_event(config.log_file, client_id, CODE_REQUEST_NEW_GAME, "Client requested a new game.");
 
-            send(client_socket, &response, sizeof(ServerResponse), 0);
-            break;
-        case CODE_DISCONNECT:
-            printf("Client requested to disconnect.\n");
-            response.code = CODE_RESPONSE_DISCONNECT;
-            send(client_socket, &response, sizeof(ServerResponse), 0);
-            close(client_socket);  // Close client connection
-            break;
-        //Multiplayer Commands will be introduced later
-        default:
-            printf("Unknown command received from client.\n");
-            response.code = CODE_RESPONSE_INVALID_COMMAND;
-            send(client_socket, &response, sizeof(ServerResponse), 0);
-            break;
+                // Fetch a random game from the available list
+                Jogo new_game = grabRandomGame(jogos, num_jogos);  // Helper method to fetch a new game
+
+                snprintf(buffer, BUFFER_SIZE, "%d %d %c", CODE_RESPONSE_NEW_GAME, client_id, new_game.tabuleiro);
+
+                log_event(config.log_file, request.id_cliente, CODE_RESPONSE_NEW_GAME, "Server responded with a new game.");
+                break;
+            case CODE_SEND_PARTIAL_SOLUTION:
+                log_event(config.log_file, client_id, CODE_SEND_PARTIAL_SOLUTION, "Client submitted a partial solution.");
+
+                int game_id;
+                int n_posicoes;
+                int posicoes[n_posicoes];
+                int numeros[n_posicoes];
+                sscanf(buffer + 4, "%d %d %d %d", game_id, n_posicoes, posicoes[n_posicoes+1], numeros[n_posicoes+1]);
+
+                Jogo *game = &jogos[game_id];
+                //Continuar aqui.
+
+            case CODE_SEND_FINAL_SOLUTION:
+                log_event(config.log_file, client_id, CODE_SEND_FINAL_SOLUTION, "Client submitted the final solution.");
+
+                // Extract the solution sent by the client
+                char client_solution[81];
+                int game_id;
+                sscanf(buffer + 4, "%d %s", game_id, client_solution); 
+
+                // Validate the client’s solution against the correct solution
+                Jogo *game = &jogos[game_id];
+                int errors = verificarJogoCompleto(client_solution, game->solucao);
+
+                // Prepare a response based on the solution check
+                if (errors == 0) {
+                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_CORRECT_FINAL, client_id, 0);
+                    log_event(config.log_file, client_id, CODE_RESPONSE_CORRECT_FINAL, "Final client solution is correct.");
+                } else {
+                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_INCORRECT_FINAL, client_id, errors);
+                    log_event(config.log_file, client_id, CODE_RESPONSE_INCORRECT_FINAL, "Final client solution has " + errors + " errors.");
+                }
+                break;
+            //Multiplayer Commands will be introduced later
+            default:
+                log_event(config.log_file, request.id_cliente, request.code, "Client sent an invalid command.");
+                response.code = CODE_RESPONSE_INVALID_COMMAND;
+                og_event(config.log_file, request.id_cliente, CODE_RESPONSE_INVALID_COMMAND, "Server responded with an invalid command.");
+                break;
+        }
+
+        send(client_socket, buffer, strlen(buffer), 0);
     }
+
+}
+
+void *client_thread(void *arg) {
+    int client_socket = *(int *)arg;
+    free(arg);
+
+    handle_client(client_socket, num_jogos, jogos); // Pass additional needed arguments
+
+    return NULL;
 }
 
 int main(int argc, char* argv[]) {
@@ -187,16 +147,26 @@ int main(int argc, char* argv[]) {
 
     // Main server loop
     while (1) {
-        // Accept a client connection
-        if ((client_socket = accept(server_socket, NULL, NULL)) == -1) {
-            perror("Failed to accept connection");
+        // Accept a new client connection
+        int *client_sock_ptr = malloc(sizeof(int));
+        *client_sock_ptr = accept(server_socket, (struct sockaddr *)&client_addr, &addr_len);
+        if (*client_sock_ptr < 0) {
+            perror("accept failed");
+            free(client_sock_ptr);
             continue;
         }
 
-        printf("Client connected.\n");
-        handle_client(client_socket, jogos, num_jogos);
-        close(client_socket);
-        printf("Client disconnected.\n");
+        // Create a new thread to handle this client
+        pthread_t thread_id;
+        if (pthread_create(&thread_id, NULL, client_thread, client_sock_ptr) != 0) {
+            perror("pthread_create failed");
+            close(*client_sock_ptr);
+            free(client_sock_ptr);
+            continue;
+        }
+
+        // Detach the thread to handle its own resources
+        pthread_detach(thread_id);
     }
 
     // Close the server socket

@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <utils.h>
+#include "unix.h"
 #include <stdbool.h>
 
 // Definir a estrutura de configuração do servidor
@@ -18,6 +19,16 @@ typedef struct {
     char tabuleiro[81];  // Grelha 9x9 linearizada
     char solucao[81];    // Solução correspondente
 } Jogo;
+
+typedef struct {
+    int id_cliente;
+    int id_jogo;
+    char tabuleiro[81];    // Grelha 9x9 linearizada
+    char solucao[81];      // Solução correspondente
+    int attempts;          // Solution attempts
+    time_t start_time;     // When the client started the game.
+    time_t end_time;       // When the client completed the game.
+} JogoState;
 
 // Função para ler o ficheiro de configuração do servidor
 void lerConfiguracaoServidor(const char* ficheiroConfig, ConfigServidor* config) {
@@ -58,11 +69,17 @@ void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int* num_jogos) {
     printf("%d jogos carregados com sucesso.\n", *num_jogos);
 }
 
-bool verificarJogoCompleto(char tabuleiro[81], char solucao_correta[81]) {
+int verificarJogoCompleto(char tabuleiro[81], char solucao_correta[81]) {
+    int erro = 0;
     if (solucao_correta == tabuleiro) {
-        return true;
+        return 0;
     } else {
-        return false;
+        for (int i = 0; i < 81; i++) {
+            if(!verificarPosicao(tabuleiro, i, solucao_correta)) {
+                erro++;
+            }
+        }
+        return erro;
     }
 }
 
