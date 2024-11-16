@@ -7,8 +7,10 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <arpa/inet.h>  // Include for IP address handling
 
 #define BUFFER_SIZE 512
+#define PORT 8080
 
 void send_message(int client_socket, int code) {
     // Send the code to the server
@@ -38,10 +40,10 @@ void send_message(int client_socket, int code) {
         case CODE_RESPONSE_STATS:
             printf("Server has sent you the game statistics.\n");
             break;
-        code CODE_RESPONSE_INCORRECT_FINAL:
+        case CODE_RESPONSE_INCORRECT_FINAL:
             //Client will have to try again
             break;    
-        code CODE_RESPONSE_CORRECT_FINAL:
+        case CODE_RESPONSE_CORRECT_FINAL:
             //Client chilling.
             break;
         
@@ -59,28 +61,42 @@ void display_menu() {
     //"User" will be able to stop the game by sending solution, may it be full or partial.
     //Client will send string with info: code, client id, game id, how many numbers to verify, numbers, positions.
     printf("3: Request Current Game Statistics\n");
-    printf("4: Request Client Statistics\n")
+    printf("4: Request Client Statistics\n");
     printf("=============================================\n");
     printf("Enter command number (1-4) or 0 to disconnect: ");
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     int client_socket;
-    struct sockaddr_un server_addr;
+    struct sockaddr_in server_addr;
 
-    // Create a UNIX domain socket
-    if ((client_socket = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+    if (argc < 2) {
+        printf("Uso: %s <ficheiro_configuracao>\n", argv[0]);
+        return 1;
+    }
+
+    // Inicializar a configuração do cliente
+    ConfigCliente config;
+    lerConfiguracaoCliente(argv[1], &config);
+    //log_event();
+
+    // Create a socket
+    if ((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("Failed to create socket");
         exit(EXIT_FAILURE);
     }
 
     // Set up the server address structure
-    memset(&server_addr, 0, sizeof(struct sockaddr_un));
-    server_addr.sun_family = AF_UNIX;
-    strncpy(server_addr.sun_path, UNIXSTR_PATH, sizeof(server_addr.sun_path) - 1);
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(8080);
+    if (inet_pton(AF_INET, config.server_ip, &server_addr.sin_addr) <= 0) {
+        perror("Invalid address/ Address not supported");
+        exit(EXIT_FAILURE);
+    }
 
     // Connect to the server
-    if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(struct sockaddr_un)) == -1) {
+    if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
         perror("Failed to connect to server");
         exit(EXIT_FAILURE);
     }

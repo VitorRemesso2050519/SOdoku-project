@@ -69,6 +69,14 @@ void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int* num_jogos) {
     printf("%d jogos carregados com sucesso.\n", *num_jogos);
 }
 
+bool verificarPosicao(char tabuleiro[81], int pos, char solucao_correta[81]) {
+    if (tabuleiro[pos] == solucao_correta[pos]) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 int verificarJogoCompleto(char tabuleiro[81], char solucao_correta[81]) {
     int erro = 0;
     if (solucao_correta == tabuleiro) {
@@ -80,14 +88,6 @@ int verificarJogoCompleto(char tabuleiro[81], char solucao_correta[81]) {
             }
         }
         return erro;
-    }
-}
-
-bool verificarPosicao(char tabuleiro[81], int pos, char solucao_correta[81]) {
-    if (tabuleiro[pos] == solucao_correta[pos]) {
-        return true;
-    } else {
-        return false;
     }
 }
 

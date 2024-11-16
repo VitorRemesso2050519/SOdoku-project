@@ -9,6 +9,7 @@ typedef struct {
     int id_cliente;        // Identificador do cliente
     char server_ip[16];    // IP do servidor
     char log_file[256];    // Caminho para o ficheiro de log
+    bool flag_full_or_partial;  // Indica se a solução enviada pelo cliente é completa ou parcial
 } ConfigCliente;
 
 // Função para ler o ficheiro de configuração do cliente
@@ -22,6 +23,7 @@ void lerConfiguracaoCliente(const char* ficheiroConfig, ConfigCliente* config) {
     fscanf(fp, "ID_CLIENTE: %d\n", &config->id_cliente);
     fscanf(fp, "IP_SERVIDOR: %s\n", config->server_ip);
     fscanf(fp, "PATH_LOGS: %s\n", config->log_file);
+    fscanf(fp, "FLAG_FULL_OR_PARTIAL: %d\n", &config->flag_full_or_partial);
     fclose(fp);
 
     // Print a configuração carregada para verificar
@@ -61,6 +63,39 @@ void shuffle(char *array, int n) {
         char temp = array[i];
         array[i] = array[j];
         array[j] = temp;
+    }
+}
+
+bool resolverSudoku(char tabuleiro[81], int pos) {
+    if (pos == 81) {
+        return true;
+    }
+
+    if (tabuleiro[pos] != '0') {
+        return resolverSudoku(tabuleiro, pos + 1);
+    }
+
+    char numeros[9] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
+    shuffle(numeros, 9);
+
+    for (int i = 0; i < 9; i++) {
+        if (ehValido(tabuleiro, pos, numeros[i])) {
+            tabuleiro[pos] = numeros[i];
+            if (resolverSudoku(tabuleiro, pos + 1)) {
+                return true;
+            }
+            tabuleiro[pos] = '0';
+        }
+    }
+
+    return false;
+}
+
+void tentarResolver(char tabuleiro[81], const char* log_file, ConfigCliente config) {
+    if (resolverSudoku(tabuleiro, 0)) {
+        log_event(log_file, config.id_cliente, 0, "Sudoku resolvido com sucesso.");
+    } else {
+        log_event(log_file, config.id_cliente, 0, "Falha ao resolver o Sudoku.");
     }
 }
 

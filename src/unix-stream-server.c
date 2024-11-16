@@ -7,9 +7,11 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <sys/un.h>
 
 #define BUFFER_SIZE 512
+#define MAX_CLIENTS 10
 
 ConfigServidor config;
 
@@ -19,6 +21,8 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
     while (1) {
         // Receive the client's message as a string
         ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+        int action_code, client_id;
+        sscanf(buffer, "%d %d", &action_code, &client_id);
         if (bytes_received <= 0) {
             // Client has disconnected or there was an error
             if (bytes_received == 0) {
@@ -32,9 +36,6 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
             return;
         }
 
-        int action_code, client_id;
-        sscanf(buffer, "%d %d", &action_code, &client_id);
-
         switch (action_code) {
             case CODE_REQUEST_NEW_GAME:
                 log_event(config.log_file, client_id, CODE_REQUEST_NEW_GAME, "Client requested a new game.");
@@ -42,18 +43,20 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                 // Fetch a random game from the available list
                 Jogo new_game = grabRandomGame(jogos, num_jogos);  // Helper method to fetch a new game
 
-                snprintf(buffer, BUFFER_SIZE, "%d %d %c", CODE_RESPONSE_NEW_GAME, client_id, new_game.id_jogo, new_game.tabuleiro);
+                snprintf(buffer, BUFFER_SIZE, "%d %d %d %s", CODE_RESPONSE_NEW_GAME, client_id, new_game.id_jogo, new_game.tabuleiro);
 
                 log_event(config.log_file, client_id, CODE_RESPONSE_NEW_GAME, "Server responded with a new game.");
+
+                send(client_socket, buffer, strlen(buffer), 0);
                 break;
             /*case CODE_SEND_PARTIAL_SOLUTION:
                 log_event(config.log_file, client_id, CODE_SEND_PARTIAL_SOLUTION, "Client submitted a partial solution.");
 
-                int game_id;
-                int n_posicoes;
+                int game_id; int n_posicoes;
+                sscanf(buffer + 4, "%d %d", &game_id, &n_posicoes);
                 int posicoes[n_posicoes];
-                int numeros[n_posicoes];
-                sscanf(buffer + 4, "%d %d %d %d", game_id, n_posicoes, posicoes[n_posicoes+1], numeros[n_posicoes+1]);
+                char numeros[n_posicoes];
+                sscanf(buffer + 4 + sizeof(int) * 2, "%d %s", posicoes, numeros);
 
                 Jogo *game = &jogos[game_id];
                 //Continuar aqui.*/
@@ -64,7 +67,7 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                 // Extract the solution sent by the client
                 char client_solution[81];
                 int game_id;
-                sscanf(buffer + 4, "%d %s", game_id, client_solution); 
+                sscanf(buffer + 4, "%d %s", &game_id, client_solution); 
 
                 // Validate the client’s solution against the correct solution
                 Jogo *game = &jogos[game_id];
@@ -76,25 +79,29 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                     log_event(config.log_file, client_id, CODE_RESPONSE_CORRECT_FINAL, "Final client solution is correct.");
                 } else {
                     snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_INCORRECT_FINAL, client_id, errors);
-                    log_event(config.log_file, client_id, CODE_RESPONSE_INCORRECT_FINAL, "Final client solution has " + errors + " errors.");
+                    char log_message[BUFFER_SIZE];
+                    snprintf(log_message, BUFFER_SIZE, "Final client solution has %d errors.", errors);
+                    log_event(config.log_file, client_id, CODE_RESPONSE_INCORRECT_FINAL, log_message);
                 }
+                send(client_socket, buffer, strlen(buffer), 0);
                 break;
             //Multiplayer Commands will be introduced later
             default:
-                log_event(config.log_file, request.id_cliente, request.code, "Client sent an invalid command.");
-                response.code = CODE_RESPONSE_INVALID_COMMAND;
-                log_event(config.log_file, request.id_cliente, CODE_RESPONSE_INVALID_COMMAND, "Server responded with an invalid command.");
+                log_event(config.log_file, client_id, CODE_RESPONSE_INVALID_COMMAND, "Client sent an invalid command.");
+                snprintf(buffer, BUFFER_SIZE, "%d %d", CODE_RESPONSE_INVALID_COMMAND, client_id);
+                send(client_socket, buffer, strlen(buffer), 0);
                 break;
         }
 
-        send(client_socket, buffer, strlen(buffer), 0);
     }
 
 }
 
 int main(int argc, char* argv[]) {
     int server_socket, client_socket;
-    struct sockaddr_un server_addr;
+    struct sockaddr_in server_addr, client_addr;
+    socklen_t addr_len = sizeof(client_addr);
+    char buffer[BUFFER_SIZE];
 
     if (argc < 2) {
         printf("Uso: %s <ficheiro_configuracao>\n", argv[0]);
@@ -111,19 +118,19 @@ int main(int argc, char* argv[]) {
     carregarJogos(config.path_jogos, jogos, &num_jogos);
 
     // Create a UNIX domain socket
-    if ((server_socket = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+    if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("Failed to create socket");
         exit(EXIT_FAILURE);
     }
 
     // Set up the socket address structure
-    memset(&server_addr, 0, sizeof(struct sockaddr_un));
-    server_addr.sun_family = AF_UNIX;
-    strncpy(server_addr.sun_path, UNIXSTR_PATH, sizeof(server_addr.sun_path) - 1);
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
+    server_addr.sin_port = htons(8080);
 
     // Bind the socket to the specified path
-    unlink(UNIXSTR_PATH); // Remove any existing file
-    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(struct sockaddr_un)) == -1) {
+    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
         perror("Failed to bind socket");
         exit(EXIT_FAILURE);
     }
@@ -133,7 +140,7 @@ int main(int argc, char* argv[]) {
         perror("Failed to listen on socket");
         exit(EXIT_FAILURE);
     }
-    printf("Server listening on %s\n", UNIXSTR_PATH);
+    printf("Server listening on %s:%d\n", inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port));
 
     // Main server loop
     while (1) {
@@ -144,11 +151,13 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
+        int client_id;
+        sscanf(buffer, "%d", &client_id);
+
+        log_event(config.log_file, client_id, CODE_NEW_CLIENT, "Client connected.");
         // Handle the client connection
         handle_client(client_socket, num_jogos, jogos);
 
-        // Close the client socket
-        close(client_socket);
     }
 
     // Close the server socket
