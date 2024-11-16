@@ -8,6 +8,8 @@ typedef struct {
     int id_cliente;        // Client identifier
     char server_ip[16];    // Server IP address
     char log_file[256];    // Path to log file
+    bool FLAG_FULL_OR_PARTIAL;
+    int n_posicoes;
 } ConfigCliente;
 
 // Function to read client configuration from a file
@@ -19,10 +21,16 @@ bool ehValido(const char tabuleiro[81], int pos, char num);
 // Function to shuffle an array of characters
 void shuffle(char *array, int n);
 
-// Recursive function to solve the Sudoku puzzle
-bool tentarResolver(char tabuleiro[81], const char solucao[81], int pos, const char* log_file, const ConfigCliente config);
+// Function to fill a position with a valid number
+bool preencherPosicao(char* tabuleiro, int pos, char* numeros);
 
-// Function to simulate a resolution attempt for the Sudoku puzzle
-void simularTentativa(char tabuleiro[81], const char solucao[81], const char* log_file, const ConfigCliente config);
+// Function to solve the Sudoku puzzle completely
+bool resolverCompleto(char* tabuleiro, int pos, char* numeros);
+
+// Function to solve the Sudoku puzzle incrementally
+void resolverIncremental(char* tabuleiro, int n, const char* servidor_ip, int id_cliente, char* numeros);
+
+// Function to attempt to solve the Sudoku puzzle
+void tentarResolver(char tabuleiro[81], const char* log_file, ConfigCliente config);
 
 #endif // UTIL_STREAM_CLIENT_H

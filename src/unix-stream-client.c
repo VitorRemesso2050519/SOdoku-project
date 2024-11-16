@@ -46,6 +46,12 @@ void send_message(int client_socket, int code) {
         case CODE_RESPONSE_CORRECT_FINAL:
             //Client chilling.
             break;
+        case CODE_RESPONSE_INCORRECT_PARTIAL:
+            //Client will have to try again
+            break;
+        case CODE_RESPONSE_CORRECT_PARTIAL:
+            //Client chilling but continues.
+            break;
         
         default:
             printf("Unknown response code received from server: %d\n", response_code);
@@ -64,6 +70,28 @@ void display_menu() {
     printf("4: Request Client Statistics\n");
     printf("=============================================\n");
     printf("Enter command number (1-4) or 0 to disconnect: ");
+}
+
+// Função que roda na thread em background
+void* resolverThread(ConfigCliente config) {
+
+    // Embaralha o array de números de 1 a 9
+    char numeros[9] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
+    shuffle(numeros, 9); // Embaralha os números uma vez para ser usado durante a resolução
+
+    if (config.FLAG_FULL_OR_PARTIAL) {
+        printf("Iniciando resolução completa...\n");
+        if (resolverCompleto(config.tabuleiro, 0, numeros)) {
+            printf("Resolução completa: Tabuleiro resolvido com sucesso!\n");
+        } else {
+            printf("Falha ao resolver o tabuleiro completo.\n");
+        }
+    } else {
+        printf("Iniciando resolução incremental...\n");
+        resolverIncremental(tabuleiro, config.n_posicoes, config.servidor_ip, config.id_cliente, numeros);
+    }
+
+    return NULL;
 }
 
 int main(int argc, char* argv[]) {
@@ -111,6 +139,12 @@ int main(int argc, char* argv[]) {
         switch (command) {
             case 1:
                 send_message(client_socket, CODE_REQUEST_NEW_GAME);
+                pthread_t thread_resolver;
+                pthread_create(&thread_resolver, NULL, resolverThread(config), &config);
+
+                printf("Resolução iniciada no background.\n");
+
+                pthread_join(thread_resolver, NULL);
                 break;
             case 2:
                 //send_message(client_socket, CODE_SEND_FINAL_SOLUTION);
