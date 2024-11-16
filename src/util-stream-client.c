@@ -9,7 +9,6 @@ typedef struct {
     int id_cliente;        // Identificador do cliente
     char server_ip[16];    // IP do servidor
     char log_file[256];    // Caminho para o ficheiro de log
-    bool flag_full_or_partial;  // Indica se a solução enviada pelo cliente é completa ou parcial
 } ConfigCliente;
 
 // Função para ler o ficheiro de configuração do cliente
@@ -23,7 +22,6 @@ void lerConfiguracaoCliente(const char* ficheiroConfig, ConfigCliente* config) {
     fscanf(fp, "ID_CLIENTE: %d\n", &config->id_cliente);
     fscanf(fp, "IP_SERVIDOR: %s\n", config->server_ip);
     fscanf(fp, "PATH_LOGS: %s\n", config->log_file);
-    fscanf(fp, "FLAG_FULL_OR_PARTIAL: %d\n", &config->flag_full_or_partial);
     fclose(fp);
 
     // Print a configuração carregada para verificar
