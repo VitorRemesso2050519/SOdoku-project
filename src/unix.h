@@ -1,13 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-
-#define UNIXSTR_PATH "/tmp/s.unixstr"
-#define UNIXDG_PATH  "/tmp/s.unixdgx"
-#define UNIXDG_TMP   "/tmp/dgPROJETO"
 
 // Message codes
 
@@ -23,9 +16,11 @@
 // Server-Side Codes
 #define CODE_RESPONSE_NEW_GAME 100          // Server sends a new game board to the client
 #define CODE_RESPONSE_GAME_STATE 101        // Server provides the current game state to the client
-#define CODE_RESPONSE_DISCONNECT 102        // Server acknowledges client disconnection
-#define CODE_RESPONSE_STATS 120             // Server provides the requested game statistics to the client
+#define CODE_RESPONSE_DISCONNECT 666        // Server acknowledges client disconnection
+#define CODE_RESPONSE_STATS 102             // Server provides the requested game statistics to the client
 #define CODE_RESPONSE_OK 200                // Server responds indicating a successful operation
+#define CODE_NEW_RECORD 201                 // Server notifies the client of a new record
+#define CODE_NOT_RECORD 202                 // Server notifies the client that the submitted time is not a record
 
 // Solution Verification Responses
 #define CODE_RESPONSE_CORRECT_PARTIAL 110   // Server indicates that the submitted partial solution is correct
@@ -47,4 +42,5 @@
 
 // Error and Control Codes
 #define CODE_RESPONSE_INVALID_COMMAND 404   // Server notifies the client of an unrecognized or unsupported command
+#define CODE_RESPONSE_ERROR 500             // Server indicates an error occurred during the operation
 #define CODE_SERVER_SHUTDOWN 999            // Server signals impending shutdown to all connected clients

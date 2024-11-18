@@ -8,7 +8,6 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <sys/un.h>
 
 #define BUFFER_SIZE 512
 #define MAX_CLIENTS 10
@@ -49,18 +48,31 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
 
                 send(client_socket, buffer, strlen(buffer), 0);
                 break;
-            /*case CODE_SEND_PARTIAL_SOLUTION:
+            case CODE_SEND_PARTIAL_SOLUTION:
                 log_event(config.log_file, client_id, CODE_SEND_PARTIAL_SOLUTION, "Client submitted a partial solution.");
-
-                int game_id; int n_posicoes;
+                int game_id, n_posicoes;
                 sscanf(buffer + 4, "%d %d", &game_id, &n_posicoes);
                 int posicoes[n_posicoes];
                 char numeros[n_posicoes];
                 sscanf(buffer + 4 + sizeof(int) * 2, "%d %s", posicoes, numeros);
-
                 Jogo *game = &jogos[game_id];
-                //Continuar aqui.*/
-
+                // Validate partial solution
+                bool partial_correct = true;
+                for (int i = 0; i < n_posicoes; i++) {
+                    if (!verificarPosicao(game->tabuleiro, posicoes[i], game->solucao)) {
+                        partial_correct = false;
+                        break;
+                    }
+                }
+                if (partial_correct) {
+                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_CORRECT_PARTIAL, client_id, 0);
+                    log_event(config.log_file, client_id, CODE_RESPONSE_CORRECT_PARTIAL, "Partial solution is correct.");
+                } else {
+                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_INCORRECT_PARTIAL, client_id, 1);
+                    log_event(config.log_file, client_id, CODE_RESPONSE_INCORRECT_PARTIAL, "Partial solution is incorrect.");
+                }
+                send(client_socket, buffer, strlen(buffer), 0);
+                break;
             case CODE_SEND_FINAL_SOLUTION:
                 log_event(config.log_file, client_id, CODE_SEND_FINAL_SOLUTION, "Client submitted the final solution.");
 
@@ -77,11 +89,45 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                 if (errors == 0) {
                     snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_CORRECT_FINAL, client_id, 0);
                     log_event(config.log_file, client_id, CODE_RESPONSE_CORRECT_FINAL, "Final client solution is correct.");
+
+                    // Update game statistics
+                    JogoState jogoState;
+                    jogoState.id_jogo = game_id;
+                    jogoState.attempts = 1; // Update this with the actual number of attempts
+                    jogoState.record_time = time(NULL); // Update this with the actual record time
+
+                    JogoState existingState;
+                    if (lerEstatisticasJogo("data/jogos_stats.txt", game_id, &existingState)) {
+                        if (difftime(jogoState.record_time, existingState.record_time) < 0 ||
+                            (difftime(jogoState.record_time, existingState.record_time) == 0 && jogoState.attempts < existingState.attempts)) {
+                            if (escreverEstatisticasJogo("data/jogos_stats.txt", &jogoState)) {
+                                log_event(config.log_file, client_id, CODE_NEW_RECORD, "Game statistics updated successfully.");
+                            } else {
+                                log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Failed to update game statistics.");
+                            }
+                        } else {
+                            log_event(config.log_file, client_id, CODE_NOT_RECORD, "New statistics are not better than existing ones.");
+                        }
+                    }
                 } else {
                     snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_INCORRECT_FINAL, client_id, errors);
                     char log_message[BUFFER_SIZE];
                     snprintf(log_message, BUFFER_SIZE, "Final client solution has %d errors.", errors);
                     log_event(config.log_file, client_id, CODE_RESPONSE_INCORRECT_FINAL, log_message);
+                }
+                send(client_socket, buffer, strlen(buffer), 0);
+                break;
+            case CODE_REQUEST_STATS:
+                log_event(config.log_file, client_id, CODE_REQUEST_STATS, "Client requested game statistics.");
+                JogoState jogoState;
+                if (lerEstatisticasJogo("data/jogos_stats.txt", game_id, &jogoState)) {
+                    char record_time_str[9];
+                    strftime(record_time_str, sizeof(record_time_str), "%H:%M:%S", localtime(&jogoState.record_time));
+                    snprintf(buffer, BUFFER_SIZE, "%d %d %d %s %d", CODE_RESPONSE_STATS, client_id, jogoState.id_jogo, record_time_str, jogoState.attempts);
+                    log_event(config.log_file, client_id, CODE_RESPONSE_STATS, "Server responded with game statistics.");
+                } else {
+                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_STATS, client_id, -1);
+                    log_event(config.log_file, client_id, CODE_RESPONSE_STATS, "Game statistics not found.");
                 }
                 send(client_socket, buffer, strlen(buffer), 0);
                 break;
@@ -162,7 +208,6 @@ int main(int argc, char* argv[]) {
 
     // Close the server socket
     close(server_socket);
-    unlink(UNIXSTR_PATH); // Clean up the socket file
 
     return 0;
 }

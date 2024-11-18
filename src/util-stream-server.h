@@ -2,6 +2,7 @@
 #define UTIL_STREAM_SERVER_H
 
 #include <stdbool.h>
+#include <time.h>
 
 // Server configuration structure
 typedef struct {
@@ -15,6 +16,13 @@ typedef struct {
     char tabuleiro[81];    // Board layout as a 9x9 grid in a single string
     char solucao[81];      // Corresponding solution grid
 } Jogo;
+
+// Game state structure
+typedef struct {
+    int id_jogo;           // Game identifier
+    int attempts;          // Solution attempts
+    time_t record_time;    // Record time for the game
+} JogoState;
 
 // Function to read server configuration from a file
 void lerConfiguracaoServidor(const char* ficheiroConfig, ConfigServidor* config);
@@ -30,5 +38,11 @@ bool verificarPosicao(char tabuleiro[81], int pos, char solucao_correta[81]);
 
 // Function to randomly select a game
 Jogo grabRandomGame(Jogo jogos[], int num_jogos);
+
+// Function to read game statistics from a file
+bool lerEstatisticasJogo(const char* ficheiroEstatisticas, int game_id, JogoState* jogoState);
+
+// Function to write game statistics to a file
+bool escreverEstatisticasJogo(const char* ficheiroEstatisticas, JogoState* jogoState);
 
 #endif // UTIL_STREAM_SERVER_H

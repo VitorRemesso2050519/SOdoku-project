@@ -18,16 +18,12 @@ typedef struct {
     int id_jogo;
     char tabuleiro[81];  // Grelha 9x9 linearizada
     char solucao[81];    // Solução correspondente
-} Jogo;
+    } Jogo;
 
 typedef struct {
-    int id_cliente;
     int id_jogo;
-    char tabuleiro[81];    // Grelha 9x9 linearizada
-    char solucao[81];      // Solução correspondente
     int attempts;          // Solution attempts
-    time_t start_time;     // When the client started the game.
-    time_t end_time;       // When the client completed the game.
+    time_t record_time;    // Record time for the game
 } JogoState;
 
 // Função para ler o ficheiro de configuração do servidor
@@ -53,6 +49,10 @@ void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int* num_jogos) {
         exit(1);
     }
 
+    char line[256];
+    // Skip the first line (header)
+    fgets(line, sizeof(line), fp);
+
     int id;
     char tabuleiro[81];
     char solucao[81];
@@ -67,6 +67,60 @@ void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int* num_jogos) {
     }
     fclose(fp);
     printf("%d jogos carregados com sucesso.\n", *num_jogos);
+}
+
+// Function to read game statistics from the file
+bool lerEstatisticasJogo(const char* ficheiroEstatisticas, int game_id, JogoState* jogoState) {
+    FILE* fp = fopen(ficheiroEstatisticas, "r");
+    if (fp == NULL) {
+        printf("Erro ao abrir o ficheiro de estatísticas!\n");
+        return false;
+    }
+
+    char line[256];
+    while (fgets(line, sizeof(line), fp)) {
+        int id;
+        int attempts;
+        char record_time_str[9];
+        sscanf(line, "%d , %8s , %d", &id, record_time_str, &attempts);
+        if (id == game_id) {
+            jogoState->id_jogo = id;
+            jogoState->attempts = attempts;
+            strptime(record_time_str, "%H:%M:%S", &jogoState->record_time);
+            fclose(fp);
+            return true;
+        }
+    }
+
+    fclose(fp);
+    return false; // Game ID not found
+}
+
+// Function to write game statistics to the file
+bool escreverEstatisticasJogo(const char* ficheiroEstatisticas, JogoState* jogoState) {
+    FILE* fp = fopen(ficheiroEstatisticas, "r+");
+    if (fp == NULL) {
+        printf("Erro ao abrir o ficheiro de estatísticas!\n");
+        return false;
+    }
+
+    char line[256];
+    long pos;
+    while ((pos = ftell(fp)) != -1 && fgets(line, sizeof(line), fp)) {
+        int id;
+        sscanf(line, "%d", &id);
+        if (id == jogoState->id_jogo) {
+            fseek(fp, pos, SEEK_SET);
+            char record_time_str[9];
+            strftime(record_time_str, sizeof(record_time_str), "%H:%M:%S", localtime(&jogoState->record_time));
+            fprintf(fp, "%d , %s , %d\n", jogoState->id_jogo, record_time_str, jogoState->attempts);
+            fclose(fp);
+            return true;
+        }
+    }
+
+    fclose(fp);
+    return false; // Game ID not found
 }
 
 bool verificarPosicao(char tabuleiro[81], int pos, char solucao_correta[81]) {
