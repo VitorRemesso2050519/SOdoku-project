@@ -22,6 +22,7 @@ typedef struct {
 
 typedef struct {
     int id_jogo;
+    int client_id;
     int attempts;          // Solution attempts
     time_t record_time;    // Record time for the game
 } JogoState;
@@ -79,12 +80,12 @@ bool lerEstatisticasJogo(const char* ficheiroEstatisticas, int game_id, JogoStat
 
     char line[256];
     while (fgets(line, sizeof(line), fp)) {
-        int id;
-        int attempts;
+        int id, client_id, attempts;
         char record_time_str[9];
-        sscanf(line, "%d , %8s , %d", &id, record_time_str, &attempts);
+        sscanf(line, "%d , %d , %8s , %d", &id, &client_id, record_time_str, &attempts);
         if (id == game_id) {
             jogoState->id_jogo = id;
+            jogoState->client_id = client_id;
             jogoState->attempts = attempts;
             strptime(record_time_str, "%H:%M:%S", &jogoState->record_time);
             fclose(fp);
@@ -113,7 +114,7 @@ bool escreverEstatisticasJogo(const char* ficheiroEstatisticas, JogoState* jogoS
             fseek(fp, pos, SEEK_SET);
             char record_time_str[9];
             strftime(record_time_str, sizeof(record_time_str), "%H:%M:%S", localtime(&jogoState->record_time));
-            fprintf(fp, "%d , %s , %d\n", jogoState->id_jogo, record_time_str, jogoState->attempts);
+            fprintf(fp, "%d , %d , %s , %d\n", jogoState->id_jogo, jogoState->client_id, record_time_str, jogoState->attempts);
             fclose(fp);
             return true;
         }
