@@ -8,11 +8,13 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <semaphore.h>
 
 #define BUFFER_SIZE 512
 #define MAX_CLIENTS 10
 
 ConfigServidor config;
+sem_t client_semaphore;
 
 void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
     char buffer[BUFFER_SIZE];
@@ -32,6 +34,7 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                 perror("recv failed");
             }
             close(client_socket);  // Clean up the socket
+            sem_post(&client_semaphore);
             return;
         }
 
@@ -54,21 +57,29 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                 sscanf(buffer + 4, "%d %d", &game_id, &n_posicoes);
                 int posicoes[n_posicoes];
                 char numeros[n_posicoes];
-                sscanf(buffer + 4 + sizeof(int) * 2, "%d %s", posicoes, numeros);
+                sscanf(buffer + 4 + sizeof(int) * 2, "%s %s", (char*)posicoes, numeros);
                 Jogo *game = &jogos[game_id];
                 // Validate partial solution
                 bool partial_correct = true;
+                int errors = 0;
+                int error_positions[n_posicoes];
                 for (int i = 0; i < n_posicoes; i++) {
                     if (!verificarPosicao(game->tabuleiro, posicoes[i], game->solucao)) {
                         partial_correct = false;
-                        break;
+                        error_positions[errors] = posicoes[i];
+                        errors++;
                     }
                 }
                 if (partial_correct) {
                     snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_CORRECT_PARTIAL, client_id, 0);
                     log_event(config.log_file, client_id, CODE_RESPONSE_CORRECT_PARTIAL, "Partial solution is correct.");
                 } else {
-                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_INCORRECT_PARTIAL, client_id, 1);
+                    snprintf(buffer, BUFFER_SIZE, "%d %d %d ", CODE_RESPONSE_INCORRECT_PARTIAL, client_id, errors);
+                    for (int i = 0; i < errors; i++) {
+                        char pos_str[4];
+                        snprintf(pos_str, sizeof(pos_str), "%d ", error_positions[i]);
+                        strncat(buffer, pos_str, BUFFER_SIZE - strlen(buffer) - 1);
+                    }
                     log_event(config.log_file, client_id, CODE_RESPONSE_INCORRECT_PARTIAL, "Partial solution is incorrect.");
                 }
                 send(client_socket, buffer, strlen(buffer), 0);
@@ -115,7 +126,9 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                     snprintf(log_message, BUFFER_SIZE, "Final client solution has %d errors.", errors);
                     log_event(config.log_file, client_id, CODE_RESPONSE_INCORRECT_FINAL, log_message);
                 }
-                send(client_socket, buffer, strlen(buffer), 0);
+                if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+                    perror("send");
+                }
                 break;
             case CODE_REQUEST_STATS:
                 log_event(config.log_file, client_id, CODE_REQUEST_STATS, "Client requested game statistics.");
@@ -129,18 +142,32 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                     snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_STATS, client_id, -1);
                     log_event(config.log_file, client_id, CODE_RESPONSE_STATS, "Game statistics not found.");
                 }
-                send(client_socket, buffer, strlen(buffer), 0);
+                if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+                    perror("send");
+                }
                 break;
             //Multiplayer Commands will be introduced later
             default:
                 log_event(config.log_file, client_id, CODE_RESPONSE_INVALID_COMMAND, "Client sent an invalid command.");
                 snprintf(buffer, BUFFER_SIZE, "%d %d", CODE_RESPONSE_INVALID_COMMAND, client_id);
-                send(client_socket, buffer, strlen(buffer), 0);
+                if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+                    perror("send");
+                }
                 break;
         }
 
     }
 
+}
+
+void* client_thread(void* arg) {
+    int client_socket = *(int*)arg;
+    free(arg);
+
+    // Handle the client
+    handle_client(client_socket, num_jogos, jogos);
+
+    return NULL;
 }
 
 int main(int argc, char* argv[]) {
@@ -188,23 +215,46 @@ int main(int argc, char* argv[]) {
     }
     printf("Server listening on %s:%d\n", inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port));
 
+    sem_init(&client_semaphore, 0, MAX_CLIENTS);
+
     // Main server loop
     while (1) {
+        // Initialize addr_len before accepting a new client connection
+        addr_len = sizeof(client_addr);
+
         // Accept a new client connection
-        int client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &addr_len);
-        if (client_socket < 0) {
-            perror("accept failed");
+        client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &addr_len);
+        if (client_socket == -1) {
+            perror("Failed to accept client connection");
             continue;
         }
 
-        int client_id;
-        sscanf(buffer, "%d", &client_id);
+        // Log the new client connection
+        int client_id = client_socket; // Assuming client_id is the socket descriptor for simplicity
+        log_event(config.log_file, client_id, CODE_NEW_CLIENT, "New client connected.");
 
-        log_event(config.log_file, client_id, CODE_NEW_CLIENT, "Client connected.");
-        // Handle the client connection
-        handle_client(client_socket, num_jogos, jogos);
+        // Create a thread to handle the client
+        pthread_t thread_id;
+        int* new_sock = malloc(sizeof(int));
+        if (new_sock == NULL) {
+            perror("Failed to allocate memory for new socket");
+            close(client_socket);
+            continue;
+        }
+        *new_sock = client_socket;
+        if (pthread_create(&thread_id, NULL, client_thread, (void*)new_sock) != 0) {
+            perror("Failed to create thread");
+            free(new_sock);
+            close(client_socket);
+            continue;
+        }
 
+        // Detach the thread to avoid resource leaks
+        pthread_detach(thread_id);
     }
+
+    // Clean up the semaphore
+    sem_destroy(&client_semaphore);
 
     // Close the server socket
     close(server_socket);
