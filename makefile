@@ -28,11 +28,11 @@ all: $(EXECUTABLE_SERVER) $(EXECUTABLE_CLIENT)
 
 # Regra para compilar o servidor
 $(EXECUTABLE_SERVER): $(SERVER_OBJ)
-	$(CC) $(CFLAGS) -o $(EXECUTABLE_SERVER) $(SERVER_OBJ)
+	$(CC) $(CFLAGS) -o $(EXECUTABLE_SERVER) $(SERVER_OBJ) -lpthread
 
 # Regra para compilar o cliente
 $(EXECUTABLE_CLIENT): $(CLIENT_OBJ)
-	$(CC) $(CFLAGS) -o $(EXECUTABLE_CLIENT) $(CLIENT_OBJ)
+	$(CC) $(CFLAGS) -o $(EXECUTABLE_CLIENT) $(CLIENT_OBJ) -lpthread
 
 # Regra genérica para compilar arquivos .o, considerando a dependência do header
 $(SRC_DIR)/unix-stream-server.o: $(SRC_DIR)/unix-stream-server.c $(SERVER_HEADER)

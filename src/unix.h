@@ -44,3 +44,5 @@
 #define CODE_RESPONSE_INVALID_COMMAND 404   // Server notifies the client of an unrecognized or unsupported command
 #define CODE_RESPONSE_ERROR 500             // Server indicates an error occurred during the operation
 #define CODE_SERVER_SHUTDOWN 999            // Server signals impending shutdown to all connected clients
+
+#define CODE_FILL_POSITION 50               // Client fills a position in the Sudoku board

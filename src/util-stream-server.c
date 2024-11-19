@@ -18,7 +18,7 @@ typedef struct {
     int id_jogo;
     char tabuleiro[81];  // Grelha 9x9 linearizada
     char solucao[81];    // Solução correspondente
-    } Jogo;
+} Jogo;
 
 typedef struct {
     int id_jogo;

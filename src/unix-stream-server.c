@@ -5,24 +5,34 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <pthread.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <semaphore.h>
+#include <time.h>      // For strptime
+#include <semaphore.h> // For sem_init, sem_post
+#include <pthread.h>   // For pthread_create, pthread_detach
 
-#define BUFFER_SIZE 512
+#define BUFFER_SIZE 1024
 #define MAX_CLIENTS 10
 
 ConfigServidor config;
 sem_t client_semaphore;
 
+int num_jogos = 0; // Define num_jogos
+Jogo jogos[100];   // Define jogos
+
 void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
     char buffer[BUFFER_SIZE];
+    int action_code, client_id;
+    int game_id, n_posicoes;
+    int posicoes[BUFFER_SIZE]; // Tamanho máximo possível
+    char numeros[BUFFER_SIZE]; // Tamanho máximo possível
+    int error_positions[BUFFER_SIZE]; // Tamanho máximo possível
+    Jogo *game;
+    int errors;
 
     while (1) {
         // Receive the client's message as a string
         ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
-        int action_code, client_id;
         sscanf(buffer, "%d %d", &action_code, &client_id);
         if (bytes_received <= 0) {
             // Client has disconnected or there was an error
@@ -48,21 +58,16 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                 snprintf(buffer, BUFFER_SIZE, "%d %d %d %s", CODE_RESPONSE_NEW_GAME, client_id, new_game.id_jogo, new_game.tabuleiro);
 
                 log_event(config.log_file, client_id, CODE_RESPONSE_NEW_GAME, "Server responded with a new game.");
-
+                
                 send(client_socket, buffer, strlen(buffer), 0);
                 break;
             case CODE_SEND_PARTIAL_SOLUTION:
-                log_event(config.log_file, client_id, CODE_SEND_PARTIAL_SOLUTION, "Client submitted a partial solution.");
-                int game_id, n_posicoes;
                 sscanf(buffer + 4, "%d %d", &game_id, &n_posicoes);
-                int posicoes[n_posicoes];
-                char numeros[n_posicoes];
                 sscanf(buffer + 4 + sizeof(int) * 2, "%s %s", (char*)posicoes, numeros);
-                Jogo *game = &jogos[game_id];
+                game = &jogos[game_id];
                 // Validate partial solution
                 bool partial_correct = true;
-                int errors = 0;
-                int error_positions[n_posicoes];
+                errors = 0;
                 for (int i = 0; i < n_posicoes; i++) {
                     if (!verificarPosicao(game->tabuleiro, posicoes[i], game->solucao)) {
                         partial_correct = false;
@@ -84,17 +89,16 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                 }
                 send(client_socket, buffer, strlen(buffer), 0);
                 break;
-            case CODE_SEND_FINAL_SOLUTION:
+            case CODE_SEND_FINAL_SOLUTION: {
                 log_event(config.log_file, client_id, CODE_SEND_FINAL_SOLUTION, "Client submitted the final solution.");
 
                 // Extract the solution sent by the client
                 char client_solution[81];
-                int game_id;
                 sscanf(buffer + 4, "%d %s", &game_id, client_solution); 
 
                 // Validate the client’s solution against the correct solution
-                Jogo *game = &jogos[game_id];
-                int errors = verificarJogoCompleto(client_solution, game->solucao);
+                game = &jogos[game_id];
+                errors = verificarJogoCompleto(client_solution, game->solucao);
 
                 // Prepare a response based on the solution check
                 if (errors == 0) {
@@ -130,7 +134,8 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                     perror("send");
                 }
                 break;
-            case CODE_REQUEST_STATS:
+            }
+            case CODE_REQUEST_STATS: {
                 log_event(config.log_file, client_id, CODE_REQUEST_STATS, "Client requested game statistics.");
                 JogoState jogoState;
                 if (lerEstatisticasJogo("data/jogos_stats.txt", game_id, &jogoState)) {
@@ -146,14 +151,16 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                     perror("send");
                 }
                 break;
+            }
             //Multiplayer Commands will be introduced later
-            default:
+            default: {
                 log_event(config.log_file, client_id, CODE_RESPONSE_INVALID_COMMAND, "Client sent an invalid command.");
                 snprintf(buffer, BUFFER_SIZE, "%d %d", CODE_RESPONSE_INVALID_COMMAND, client_id);
                 if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
                     perror("send");
                 }
                 break;
+            }
         }
 
     }
@@ -164,25 +171,45 @@ void* client_thread(void* arg) {
     int client_socket = *(int*)arg;
     free(arg);
 
+    char buffer[BUFFER_SIZE];
+    int action_code;
+    int client_id;
+
+    // Receive the initial message from the client
+    ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+    if (bytes_received <= 0) {
+        perror("Failed to receive initial message from client");
+        close(client_socket);
+        sem_post(&client_semaphore);
+        return NULL;
+    }
+    buffer[bytes_received] = '\0';
+    sscanf(buffer, "%d %d", &action_code, &client_id);
+
+    if (action_code != CODE_NEW_CLIENT) {
+        printf("Invalid initial message from client\n");
+        close(client_socket);
+        sem_post(&client_semaphore);
+        return NULL;
+    }
+
+    log_event(config.log_file, client_id, CODE_NEW_CLIENT, "New client connected.");
+
     // Handle the client
     handle_client(client_socket, num_jogos, jogos);
 
     return NULL;
 }
-
 int main(int argc, char* argv[]) {
     int server_socket, client_socket;
     struct sockaddr_in server_addr, client_addr;
     socklen_t addr_len = sizeof(client_addr);
-    char buffer[BUFFER_SIZE];
+    int client_id; // Declare client_id here
 
     if (argc < 2) {
         printf("Uso: %s <ficheiro_configuracao>\n", argv[0]);
         return 1;
     }
-
-    Jogo jogos[100];   // Suporte para até 100 jogos por simplicidade´
-    int num_jogos = 0;
 
     // Ler a configuração do servidor
     lerConfiguracaoServidor(argv[1], &config);
@@ -228,10 +255,6 @@ int main(int argc, char* argv[]) {
             perror("Failed to accept client connection");
             continue;
         }
-
-        // Log the new client connection
-        int client_id = client_socket; // Assuming client_id is the socket descriptor for simplicity
-        log_event(config.log_file, client_id, CODE_NEW_CLIENT, "New client connected.");
 
         // Create a thread to handle the client
         pthread_t thread_id;

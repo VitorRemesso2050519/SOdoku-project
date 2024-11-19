@@ -8,8 +8,8 @@ typedef struct {
     int id_cliente;        // Client identifier
     char server_ip[16];    // Server IP address
     char log_file[256];    // Path to log file
-    bool FLAG_FULL_OR_PARTIAL;
-    int n_posicoes;
+    int games_solved;
+    int errors_sent;
 } ConfigCliente;
 
 // Function to read client configuration from a file
