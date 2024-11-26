@@ -63,8 +63,16 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                 break;
             case CODE_SEND_PARTIAL_SOLUTION:
                 sscanf(buffer + 4, "%d %d", &game_id, &n_posicoes);
-                sscanf(buffer + 4 + sizeof(int) * 2, "%s %s", (char*)posicoes, numeros);
+                if (game_id < 0 || game_id >= num_jogos) {
+                    log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Invalid game ID.");
+                    break;
+                }
                 game = &jogos[game_id];
+                if (n_posicoes < 0 || n_posicoes > 81) {
+                    log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Invalid number of positions.");
+                    break;
+                }
+                sscanf(buffer + 4 + sizeof(int) * 2, "%s %s", (char*)posicoes, numeros);
                 // Validate partial solution
                 bool partial_correct = true;
                 errors = 0;
