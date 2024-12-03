@@ -16,6 +16,7 @@
 
 ConfigServidor config;
 sem_t client_semaphore;
+pthread_mutex_t log_mutex;
 
 int num_jogos = 0; // Define num_jogos
 Jogo jogos[100];   // Define jogos
@@ -38,7 +39,9 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
             // Client has disconnected or there was an error
             if (bytes_received == 0) {
                 // Client disconnected gracefully
+                pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_DISCONNECT, "Client disconnected.");
+                pthread_mutex_unlock(&log_mutex);
             } else {
                 // An error occurred
                 perror("recv failed");
@@ -57,19 +60,25 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
 
                 snprintf(buffer, BUFFER_SIZE, "%d %d %d %s", CODE_RESPONSE_NEW_GAME, client_id, new_game.id_jogo, new_game.tabuleiro);
 
+                pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_RESPONSE_NEW_GAME, "Server responded with a new game.");
+                pthread_mutex_unlock(&log_mutex);
                 
                 send(client_socket, buffer, strlen(buffer), 0);
                 break;
             case CODE_SEND_PARTIAL_SOLUTION:
                 sscanf(buffer + 4, "%d %d", &game_id, &n_posicoes);
                 if (game_id < 0 || game_id >= num_jogos) {
+                    pthread_mutex_lock(&log_mutex);
                     log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Invalid game ID.");
+                    pthread_mutex_unlock(&log_mutex);
                     break;
                 }
                 game = &jogos[game_id];
                 if (n_posicoes < 0 || n_posicoes > 81) {
+                    pthread_mutex_lock(&log_mutex);
                     log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Invalid number of positions.");
+                    pthread_mutex_unlock(&log_mutex);
                     break;
                 }
                 sscanf(buffer + 4 + sizeof(int) * 2, "%s %s", (char*)posicoes, numeros);
@@ -85,7 +94,9 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                 }
                 if (partial_correct) {
                     snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_CORRECT_PARTIAL, client_id, 0);
+                    pthread_mutex_lock(&log_mutex);
                     log_event(config.log_file, client_id, CODE_RESPONSE_CORRECT_PARTIAL, "Partial solution is correct.");
+                    pthread_mutex_unlock(&log_mutex);
                 } else {
                     snprintf(buffer, BUFFER_SIZE, "%d %d %d ", CODE_RESPONSE_INCORRECT_PARTIAL, client_id, errors);
                     for (int i = 0; i < errors; i++) {
@@ -93,12 +104,16 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                         snprintf(pos_str, sizeof(pos_str), "%d ", error_positions[i]);
                         strncat(buffer, pos_str, BUFFER_SIZE - strlen(buffer) - 1);
                     }
+                    pthread_mutex_lock(&log_mutex);
                     log_event(config.log_file, client_id, CODE_RESPONSE_INCORRECT_PARTIAL, "Partial solution is incorrect.");
+                    pthread_mutex_unlock(&log_mutex);
                 }
                 send(client_socket, buffer, strlen(buffer), 0);
                 break;
             case CODE_SEND_FINAL_SOLUTION: {
+                pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_SEND_FINAL_SOLUTION, "Client submitted the final solution.");
+                pthread_mutex_unlock(&log_mutex);
 
                 // Extract the solution sent by the client
                 char client_solution[81];
@@ -111,7 +126,9 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                 // Prepare a response based on the solution check
                 if (errors == 0) {
                     snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_CORRECT_FINAL, client_id, 0);
+                    pthread_mutex_lock(&log_mutex);
                     log_event(config.log_file, client_id, CODE_RESPONSE_CORRECT_FINAL, "Final client solution is correct.");
+                    pthread_mutex_unlock(&log_mutex);
 
                     // Update game statistics
                     JogoState jogoState;
@@ -124,19 +141,27 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                         if (difftime(jogoState.record_time, existingState.record_time) < 0 ||
                             (difftime(jogoState.record_time, existingState.record_time) == 0 && jogoState.attempts < existingState.attempts)) {
                             if (escreverEstatisticasJogo("data/jogos_stats.txt", &jogoState)) {
+                                pthread_mutex_lock(&log_mutex);
                                 log_event(config.log_file, client_id, CODE_NEW_RECORD, "Game statistics updated successfully.");
+                                pthread_mutex_unlock(&log_mutex);
                             } else {
+                                pthread_mutex_lock(&log_mutex);
                                 log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Failed to update game statistics.");
+                                pthread_mutex_unlock(&log_mutex);
                             }
                         } else {
+                            pthread_mutex_lock(&log_mutex);
                             log_event(config.log_file, client_id, CODE_NOT_RECORD, "New statistics are not better than existing ones.");
+                            pthread_mutex_unlock(&log_mutex);
                         }
                     }
                 } else {
                     snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_INCORRECT_FINAL, client_id, errors);
                     char log_message[BUFFER_SIZE];
                     snprintf(log_message, BUFFER_SIZE, "Final client solution has %d errors.", errors);
+                    pthread_mutex_lock(&log_mutex);
                     log_event(config.log_file, client_id, CODE_RESPONSE_INCORRECT_FINAL, log_message);
+                    pthread_mutex_unlock(&log_mutex);
                 }
                 if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
                     perror("send");
@@ -150,10 +175,14 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
                     char record_time_str[9];
                     strftime(record_time_str, sizeof(record_time_str), "%H:%M:%S", localtime(&jogoState.record_time));
                     snprintf(buffer, BUFFER_SIZE, "%d %d %d %s %d", CODE_RESPONSE_STATS, client_id, jogoState.id_jogo, record_time_str, jogoState.attempts);
+                    pthread_mutex_lock(&log_mutex);
                     log_event(config.log_file, client_id, CODE_RESPONSE_STATS, "Server responded with game statistics.");
+                    pthread_mutex_unlock(&log_mutex);
                 } else {
                     snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_STATS, client_id, -1);
+                    pthread_mutex_lock(&log_mutex);
                     log_event(config.log_file, client_id, CODE_RESPONSE_STATS, "Game statistics not found.");
+                    pthread_mutex_unlock(&log_mutex);
                 }
                 if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
                     perror("send");
@@ -162,7 +191,9 @@ void handle_client(int client_socket, int num_jogos, Jogo jogos[]) {
             }
             //Multiplayer Commands will be introduced later
             default: {
+                pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_RESPONSE_INVALID_COMMAND, "Client sent an invalid command.");
+                pthread_mutex_unlock(&log_mutex);
                 snprintf(buffer, BUFFER_SIZE, "%d %d", CODE_RESPONSE_INVALID_COMMAND, client_id);
                 if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
                     perror("send");
@@ -201,7 +232,9 @@ void* client_thread(void* arg) {
         return NULL;
     }
 
+    pthread_mutex_lock(&log_mutex);
     log_event(config.log_file, client_id, CODE_NEW_CLIENT, "New client connected.");
+    pthread_mutex_unlock(&log_mutex);
 
     // Handle the client
     handle_client(client_socket, num_jogos, jogos);
@@ -252,6 +285,12 @@ int main(int argc, char* argv[]) {
 
     sem_init(&client_semaphore, 0, MAX_CLIENTS);
 
+    // Inicializar o mutex para os logs
+    if (pthread_mutex_init(&log_mutex, NULL) != 0) {
+        perror("Failed to initialize log mutex");
+        return 1;
+    }
+
     // Main server loop
     while (1) {
         // Initialize addr_len before accepting a new client connection
@@ -287,8 +326,13 @@ int main(int argc, char* argv[]) {
     // Clean up the semaphore
     sem_destroy(&client_semaphore);
 
+    // Destroy the mutex for logs
+    pthread_mutex_destroy(&log_mutex);
+
     // Close the server socket
     close(server_socket);
 
     return 0;
 }
+
+// sincronização nos logs (pode haver diferentes clientes a fazer pedidos ao mesmo tempo, o que o server tem que registar)
