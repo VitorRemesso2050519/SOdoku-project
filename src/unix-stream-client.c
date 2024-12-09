@@ -14,19 +14,13 @@
 #define PORT 8080
 
 ConfigCliente config;
-int game_in_progress = 0; // Declare the flag
+pthread_mutex_t solver_thread = PTHREAD_MUTEX_INITIALIZER;
+int client_socket;
 
 typedef struct {
     int id_jogo;
-    char tabuleiro[82]; // 81 characters + null terminator
-    time_t hora_inicio; // Declare hora_inicio
+    char tabuleiro[81]; // 81 characters
 } GameData;
-
-typedef struct {
-    int client_socket;
-    ConfigCliente config;
-    GameData game_data;
-} ThreadArgs;
 
 void request_new_game(int client_socket, ConfigCliente config);
 void request_game_statistics(int client_socket);
@@ -35,7 +29,8 @@ GameData receive_new_game(ConfigCliente config);
 void receive_game_statistics(int client_socketNo);
 void display_menu();
 void display_game_status();
-void* solve_game(void* arg);
+void* solve_game_complete(void* arg);
+void* solve_game_in_increments(void* arg);
 
 int main(int argc, char* argv[]) {
     struct sockaddr_in server_addr;
@@ -94,11 +89,7 @@ int main(int argc, char* argv[]) {
         scanf("%d", &command);
         switch (command) {
             case 1:
-                if (game_in_progress) {
-                    printf("A game is already in progress. Please wait until it is solved.\n");
-                } else {
-                    request_new_game(client_socket, config);
-                }
+                request_new_game(client_socket);
                 break;
             case 2:
                 multiplayer();
@@ -126,26 +117,300 @@ int main(int argc, char* argv[]) {
     }
 }
 
-void request_new_game(int client_socket, ConfigCliente config) {
+void request_new_game(int client_socket) {
     char buffer[BUFFER_SIZE];
-    snprintf(buffer, BUFFER_SIZE, "%d %d", CODE_REQUEST_NEW_GAME, config.id_cliente);
+    snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_REQUEST_NEW_GAME);
     if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
         perror("Failed to send new game request to server");
         log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send new game request to server.");
     } else {
         printf("New game request sent to the server.\n");
         log_event(config.log_file, config.id_cliente, CODE_REQUEST_NEW_GAME, "New game request sent to the server.");
-        GameData game_data = receive_new_game(config);
-
-        game_in_progress = 1;
-
-        pthread_create(&solver_thread, NULL, solve_game, &game_data);
+        GameData* game_data = malloc(sizeof(GameData));
+        if (game_data == NULL) {
+            perror("Failed to allocate memory for game data");
+            return;
+        }
+        *game_data = receive_new_game();
+        if (game_data->id_jogo != 0) {
+            if (config.is_full_or_partial == 0 ) {
+                pthread_create(&solver_thread, NULL, solve_game_complete, game_data);
+                pthread_detach(solver_thread); // Detach the thread to avoid resource leaks
+            } else if (config.is_full_or_partial == 1) {
+                pthread_create(&solver_thread, NULL, solve_game_in_increments, game_data);
+                pthread_detach(solver_thread); // Detach the thread to avoid resource leaks
+            }
+        } else {
+            free(game_data);
+        }
     }
 }
 
+GameData receive_new_game(){
+    char buffer[BUFFER_SIZE];
+    ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+    if (bytes_received == -1) {
+        perror("Failed to receive new game from server");
+        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game from server.");
+        return (GameData){0};
+    }
+
+    buffer[bytes_received] = '\0';
+    int response_code, client_id, game_id;
+    char tabuleiro[81];
+    sscanf(buffer, "%d %d %d %s", &client_id, &response_code, &game_id, tabuleiro);
+
+    if (response_code == CODE_RESPONSE_NEW_GAME) {
+        printf("New game received from the server.\n");
+        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_NEW_GAME, "New game received from the server.");
+        GameData game_data;
+        game_data.id_jogo = game_id;
+        memcpy(game_data.tabuleiro, tabuleiro, 81);
+        display_game_status(game_data.tabuleiro, game_data.id_jogo);
+        return game_data;
+    } else {
+        printf("Failed to receive new game. Server response code: %d\n", response_code);
+        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game. Invalid response code.");
+    }
+
+    return GameData{0};
+}
+
+void* solve_game_complete(void* arg) { //In theory, this function should solve the game in its entirety (not in increments)
+    GameData* game_data = (GameData*)arg;
+    char buffer[BUFFER_SIZE];
+    int attempts = 0;
+
+    char number_array[] = {'1','2','3','4','5','6','7','8','9'};
+    shuffle(number_array, 9);
+
+    time_t start_time = time(NULL);
+    char* solved_board = NULL;
+    time_t end_time;
+    double elapsed_time;
+    int response_code;
+
+    do {
+        attempts++;
+        solved_board = resolverCompleto(game_data->tabuleiro, 0, number_array);
+        end_time = time(NULL);
+        elapsed_time = difftime(end_time, start_time);
+        display_game_status(solved_board, game_data->id_jogo, elapsed_time, start_time);
+
+        if (solved_board == NULL) {
+            printf("Failed to solve the Sudoku puzzle.\n");
+            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to solve the Sudoku puzzle.");
+            return NULL;
+        } else {
+            printf("\nSudoku puzzle solved.\n");
+            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_OK, "Sudoku puzzle solved.");
+            snprintf(buffer, BUFFER_SIZE, "%d %d %d %s %d %.2f", config.id_cliente, CODE_SEND_FINAL_SOLUTION, game_data->id_jogo, solved_board, attempts, elapsed_time);
+            if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+                perror("Failed to send solution to server");
+                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send solution to server.");
+                return NULL;
+            }
+
+            // Wait for server response
+            ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+            if (bytes_received == -1) {
+                perror("Failed to receive game verification from server");
+                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive game verification from server.");
+                return NULL;
+            }
+            buffer[bytes_received] = '\0';
+            int client_id;
+            sscanf(buffer, "%d %d", &client_id, &response_code);
+            if (response_code == CODE_RESPONSE_CORRECT_FINAL) {
+                printf("Final solution is correct!\n");
+                display_game_status(solved_board, game_data->id_jogo, elapsed_time, start_time);
+                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_CORRECT_FINAL, "Final solution is correct.");
+
+                // Wait for record status message from server
+                bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+                if (bytes_received == -1) {
+                    perror("Failed to receive record status from server");
+                    log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive record status from server.");
+                    return NULL;
+                }
+                buffer[bytes_received] = '\0';
+                int record_code;
+                sscanf(buffer, "%d %d", &client_id, &record_code);
+                if (response_code == CODE_NEW_RECORD) {
+                    printf("New record achieved!\n");
+                    log_event(config.log_file, config.id_cliente, CODE_NEW_RECORD, "New record achieved.");
+                } else if (response_code == CODE_NOT_RECORD) {
+                    printf("Solution is correct but not a new record. Sorry!\n");
+                    log_event(config.log_file, config.id_cliente, CODE_NOT_RECORD, "Solution is correct but not a new record.");
+                } else {
+                    printf("Failed to receive valid record status. Server response code: %d\n", response_code);
+                    log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive valid record status. Invalid response code.");
+                    return NULL;
+                }
+                break;
+            } else if (response_code == CODE_RESPONSE_INCORRECT_FINAL) {
+                int errors;
+                sscanf(buffer, "%d %d %d %d %s", &client_id, &response_code, &game_data->id_jogo, &errors, game_data->tabuleiro);
+                printf("Final solution is incorrect. Contained %d errors. Retrying...\n", errors); //Reference number of errors
+                display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
+                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_INCORRECT_FINAL, "Final solution is incorrect. Retrying...");
+            } else {
+                printf("Failed to receive game verification. Server response code: %d\n", response_code);
+                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive game verification. Invalid response code.");
+                return NULL;
+            }
+        }
+    } while (response_code != CODE_RESPONSE_CORRECT_FINAL);
+
+    return NULL;
+}
+
+void* solve_game_in_increments(void* arg) {
+    GameData* game_data = (GameData*)arg;
+    char buffer[BUFFER_SIZE];
+    int attempts = 0;
+    int n = 5; // Will be replaced with a config thing
+    int filled_positions = 0;
+
+    char number_array[] = {'1','2','3','4','5','6','7','8','9'};
+    shuffle(number_array, 9);
+
+    time_t start_time = time(NULL);
+    time_t send_time;
+    double elapsed_time;
+    int response_code;
+
+    do {
+        attempts++;
+        int positions_filled_this_round = 0;
+        char* positions[n]; //this has to be the size of n
+
+        // Fill n spaces incrementally
+        for (int i = 0; i < 81 && positions_filled_this_round < n; i++) {
+            if (game_data->tabuleiro[i] == '0') {
+                for (int j = 0; j < 9; j++) {
+                    if (preencherPosicao(game_data->tabuleiro, i, number_array[j])) {
+                        positions_filled_this_round++;
+                        positions[positions_filled_this_round] = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        filled_positions += positions_filled_this_round;
+        send_time = time(NULL);
+        elapsed_time = difftime(send_time, start_time);
+
+        if (filled_positions == 81) {
+            // Send the full solution to the server
+            snprintf(buffer, BUFFER_SIZE, "%d %d %d %s %d %.2f", config.id_cliente, CODE_SEND_FINAL_SOLUTION, game_data->id_jogo, game_data->tabuleiro, attempts, elapsed_time);
+            display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
+            if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+                perror("Failed to send full solution to server");
+                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send full solution to server.");
+                return NULL;
+            }
+        } else {
+            // Send the partial solution to the server
+            snprintf(buffer, BUFFER_SIZE, "%d %d %d %s %d", config.id_cliente, CODE_SEND_PARTIAL_SOLUTION, game_data->id_jogo, game_data->tabuleiro, positions_filled_this_round);
+            for (int i = 0; i < positions_filled_this_round; i++) {
+            char pos_str[4];
+            snprintf(pos_str, sizeof(pos_str), " %d", positions[i]);
+            strncat(buffer, pos_str, BUFFER_SIZE - strlen(buffer) - 1);
+            display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
+        }
+            if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+                perror("Failed to send partial solution to server");
+                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send partial solution to server.");
+                return NULL;
+            }
+        }
+
+        // Wait for server response
+        ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+        if (bytes_received == -1) {
+            perror("Failed to receive solution verification from server");
+            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive solution verification from server.");
+            return NULL;
+        }
+        buffer[bytes_received] = '\0';
+        int client_id;
+        sscanf(buffer, "%d %d", &client_id, &response_code);
+
+        if (response_code == CODE_RESPONSE_CORRECT_PARTIAL) {
+            printf("Partial solution is correct.\n");
+            display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
+            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_CORRECT_PARTIAL, "Partial solution is correct.");
+        } else if (response_code == CODE_RESPONSE_INCORRECT_PARTIAL) {
+            int errors;
+            sscanf(buffer, "%d %d %d %s", &client_id, &response_code, &game_data->id_jogo, &errors, game_data->tabuleiro);
+            printf("Partial solution is incorrect. Contained %d errors. Retrying...\n", errors);
+            display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
+            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_INCORRECT_PARTIAL, "Partial solution is incorrect. Retrying...");
+            filled_positions -= positions_filled_this_round; // Rollback the filled positions
+        } else if (response_code == CODE_RESPONSE_CORRECT_FINAL) {
+            printf("Final solution is correct!\n");
+            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_CORRECT_FINAL, "Final solution is correct.");
+            display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
+            // Wait for record status message from server
+            bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+            if (bytes_received == -1) {
+                perror("Failed to receive record status from server");
+                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive record status from server.");
+                return NULL;
+            }
+            buffer[bytes_received] = '\0';
+            int record_code;
+            sscanf(buffer, "%d %d", &client_id, &record_code);
+
+            if (record_code == CODE_NEW_RECORD) {
+                printf("New record achieved!\n");
+                log_event(config.log_file, config.id_cliente, CODE_NEW_RECORD, "New record achieved.");
+            } else if (record_code == CODE_NOT_RECORD) {
+                printf("Solution is correct but not a new record. Sorry!\n");
+                log_event(config.log_file, config.id_cliente, CODE_NOT_RECORD, "Solution is correct but not a new record.");
+            } else {
+                printf("Failed to receive valid record status. Server response code: %d\n", record_code);
+                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive valid record status. Invalid response code.");
+                return NULL;
+            }
+            break;
+        } else if (response_code == CODE_RESPONSE_INCORRECT_FINAL) {
+            int errors;
+            sscanf(buffer, "%d %d %d %d %s", &client_id, &response_code, &game_data->id_jogo, &errors, game_data->tabuleiro);
+            printf("Final solution is incorrect. Contained %d errors. Retrying...\n", errors);
+            display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
+            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_INCORRECT_FINAL, "Final solution is incorrect. Retrying...");
+            filled_positions -= errors; // Rollback the filled positions
+        } else {
+            printf("Failed to receive solution verification. Server response code: %d\n", response_code);
+            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive solution verification. Invalid response code.");
+            return NULL;
+        }
+
+    } while (response_code != CODE_RESPONSE_CORRECT_FINAL);
+
+    return NULL;
+
+}
+
+void display_game_status(char* tabuleiro, int id_jogo, double elapsed, time_t start_time) {
+
+    int minutes = (int)elapsed / 60;
+    int seconds = (int)elapsed % 60;
+
+    printf("\nID jogo a decorrer: %d\n", id_jogo);
+    printf("Hora de início: %s", ctime(&(start_time)));
+    printf("Tempo decorrido: %02d:%02d\n", minutes, seconds);
+    printf("Tabuleiro atual:\n");
+    imprimirGrelha(tabuleiro);
+
+}//quando ele manda pro server e recebe do server, mostrar display
+
 void request_game_statistics(int client_socket) {
     char buffer[BUFFER_SIZE];
-    snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_REQUEST_STATS, config.id_cliente, id_jogo);
+    snprintf(buffer, BUFFER_SIZE, "%d %d %d", config.id_cliente, CODE_REQUEST_STATS, game_data.id_jogo);
     if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
         perror("Failed to send game statistics request to server");
         log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send game statistics request to server.");
@@ -154,43 +419,6 @@ void request_game_statistics(int client_socket) {
         log_event(config.log_file, config.id_cliente, CODE_REQUEST_STATS, "Game statistics request sent to the server.");
         receive_game_statistics();
     }
-}
-
-GameData receive_new_game(ConfigCliente config) {
-    char buffer[BUFFER_SIZE];
-    ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
-    GameData game_data = {0, {0}}; // Initialize with default values
-
-    if (bytes_received == -1) {
-        perror("Failed to receive new game from server");
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game from server.");
-        return game_data;
-    }
-    buffer[bytes_received] = '\0';
-
-    int response_code, client_id;
-    char new_board[82] = {0}; // Initialize with zeros to ensure null-termination
-
-    int parsed_items = sscanf(buffer, "%d %d %d %81s", &response_code, &client_id, &game_data.id_jogo, new_board);
-    if (parsed_items != 4) {
-        printf("Failed to parse new game response. Parsed items: %d\n", parsed_items);
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to parse new game response.");
-        return game_data;
-    }
-
-    if (response_code == CODE_RESPONSE_NEW_GAME) {
-        strncpy(game_data.tabuleiro, new_board, 82);
-        hora_inicio = time(NULL);
-        printf("New game received from server. Game ID: %d\n", game_data.id_jogo);
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_NEW_GAME, "New game received from server.");
-    } else {
-        printf("Failed to receive new game. Server response code: %d\n", response_code);
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game. Invalid response code.");
-    }
-
-    game_data.config = config;
-
-    return game_data;
 }
 
 void receive_game_statistics(int client_socket) {
@@ -205,7 +433,7 @@ void receive_game_statistics(int client_socket) {
 
     int response_code, client_id, game_id, attempts;
     char record_time_str[9];
-    sscanf(buffer, "%d %d %d %s %d", &response_code, &client_id, &game_id, record_time_str, &attempts);
+    sscanf(buffer, "%d %d %d %s %d", &client_id, &response_code, &game_id, record_time_str, &attempts);
 
     if (response_code == CODE_RESPONSE_STATS) {
         printf("Game Statistics:\n");
@@ -222,7 +450,7 @@ void receive_game_statistics(int client_socket) {
 void request_client_statistics() {
     printf("\n======== Sudoku Client Statistics =========\n");
     printf("Solved Games: %d\n", config.games_solved);
-    printf("Errors Sent: %d\n", config.errors_sent);
+    printf("Errors: %d\n", config.errors_sent);
     printf("=============================================\n");
 }
 
@@ -236,100 +464,3 @@ void display_menu() {
     printf("=============================================\n");
     printf("Enter command number: ");
 }
-
-void* solve_game(void* arg) {
-    ThreadArgs* thread_args = (ThreadArgs*)arg;
-    int client_socket = thread_args->client_socket;
-    GameData* game_data = &thread_args->game_data;
-
-    while (1) {
-        bool is_full = true;
-        for (int i = 0; i < 81; i++) {
-            if (game_data->tabuleiro[i] == '0' || game_data->tabuleiro[i] == 'X') {
-                is_full = false;
-                break;
-            }
-        }
-
-        if (is_full) {
-            // Send the full solution to the server
-            char message[BUFFER_SIZE];
-            snprintf(message, BUFFER_SIZE, "%d %d %d %02d:%02d %d", CODE_SEND_FINAL_SOLUTION, config.id_cliente, game_data->id_jogo, minutes, seconds, filled_count);
-            strncat(message, game_data->tabuleiro, BUFFER_SIZE - strlen(message) - 1);
-            if (send(client_socket, message, strlen(message), 0) == -1) {
-                perror("Failed to send full solution to server");
-            }
-            printf("Full solution sent to the server.\n");
-            log_event(config.log_file, config.id_cliente, CODE_SEND_FINAL_SOLUTION, "Full solution sent to the server.");
-        } else {
-            // Send the filled positions and numbers to the server
-            char message[BUFFER_SIZE];
-            snprintf(message, BUFFER_SIZE, "%d %d %d", CODE_SEND_PARTIAL_SOLUTION, config.id_cliente, game_data->id_jogo);
-            for (int i = 0; i < filled_count; i++) {
-                char pos_str[4];
-                snprintf(pos_str, sizeof(pos_str), " %d", filled_positions[i]);
-                strncat(message, pos_str, BUFFER_SIZE - strlen(message) - 1);
-            }
-            for (int i = 0; i < filled_count; i++) {
-                char num_str[4];
-                snprintf(num_str, sizeof(num_str), " %d", filled_numbers[i]);
-                strncat(message, num_str, BUFFER_SIZE - strlen(message) - 1);
-            }
-            if (send(client_socket, message, strlen(message), 0) == -1) {
-                perror("Failed to send partial solution to server");
-                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send partial solution to server.");
-            } else {
-                printf("Positions and numbers sent to the server.\n");
-                char log_message[BUFFER_SIZE];
-                snprintf(log_message, BUFFER_SIZE, "Partial solution with %d positions sent to the server.", filled_count);
-                log_event(config.log_file, config.id_cliente, CODE_SEND_PARTIAL_SOLUTION, log_message);
-
-                // Wait for the server's response
-                ssize_t bytes_received = recv(client_socket, message, BUFFER_SIZE - 1, 0);
-                if (bytes_received == -1) {
-                    perror("Failed to receive response from server");
-                    log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive response from server.");
-                } else {
-                    message[bytes_received] = '\0';
-                    int response_code, error_count;
-                    sscanf(message, "%d %d", &response_code, &error_count);
-                    if (response_code == CODE_RESPONSE_INCORRECT_PARTIAL) {
-                        printf("Partial solution has %d errors.\n", error_count);
-                        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_INCORRECT_PARTIAL, "Partial solution has errors.");
-                        // Replace incorrect positions with 'X'
-                        char* token = strtok(message + strlen(message) + 1, " ");
-                        for (int i = 0; i < error_count; i++) {
-                            int error_pos;
-                            sscanf(token, "%d", &error_pos);
-                            game_data->tabuleiro[error_pos] = 'X';
-                            token = strtok(NULL, " ");
-                        }
-                    } else if (response_code == CODE_RESPONSE_CORRECT_PARTIAL) {
-                        printf("Partial solution is correct.\n");
-                        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_CORRECT_PARTIAL, "Partial solution is correct.");
-                    }
-                }
-            }
-        }
-    }
-    game_in_progress = 0;
-}
-
-void display_game_status() {
-    int filled_positions[81];
-    int filled_numbers[81];
-    int filled_count = 0;
-
-    time_t now = time(NULL);
-    double elapsed = difftime(now, hora_inicio);
-    int minutes = (int)elapsed / 60;
-    int seconds = (int)elapsed % 60;
-
-    printf("\nID jogo a decorrer: %d\n", id_jogo);
-    printf("Hora de início: %s", ctime(&hora_inicio));
-    printf("Tempo decorrido: %02d:%02d\n", minutes, seconds);
-    printf("Tabuleiro atual:\n");
-    imprimirGrelha(tabuleiro);
-}
-
-//quando ele manda pro server e recebe do server, mostrar display

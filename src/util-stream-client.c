@@ -9,6 +9,8 @@ typedef struct {
     int id_cliente;        // Identificador do cliente
     char server_ip[16];    // IP do servidor
     char log_file[256];    // Caminho para o ficheiro de logs
+    bool is_full_or_partial; // Flag para indicar se resolve completo ou parcial
+    bool is_vip; // Flag para indicar se é VIP
     int games_solved;
     int errors_sent;
 } ConfigCliente;
@@ -24,6 +26,8 @@ void lerConfiguracaoCliente(const char* ficheiroConfig, ConfigCliente* config) {
     fscanf(fp, "ID_CLIENTE: %d\n", &config->id_cliente);
     fscanf(fp, "IP_SERVIDOR: %s\n", config->server_ip);
     fscanf(fp, "PATH_LOGS: %s\n", config->log_file);
+    fscanf(fp, "IS_FULL_OR_PARTIAL: %d\n", &config->is_full_or_partial);
+    fscanf(fp, "IS_VIP: %d\n", &config->is_vip);
     fscanf(fp, "GAMES_SOLVED: %d\n", &config->games_solved);
     fscanf(fp, "ERRORS_SENT: %d\n", &config->errors_sent);
     fclose(fp);
@@ -71,38 +75,27 @@ bool preencherPosicao(char* tabuleiro, int pos, char num) {
     return false;
 }
 
-/*bool resolverSudoku(char tabuleiro[81], int pos) {
-    if (pos == 81) {
-        return true;
-    }
-
-    if (tabuleiro[pos] != '0') {
-        return resolverSudoku(tabuleiro, pos + 1);
-    }
-
-    char numeros[9] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
-    shuffle(numeros, 9);
-
+char* resolverCompleto(char* tabuleiro, int pos, char* numeros) {
+    if (pos == 81) return tabuleiro; // Tabuleiro completo
+    if (tabuleiro[pos] != '0') return resolverCompleto(tabuleiro, pos + 1, numeros);
+    // Preenche a posição com um número válido
     for (int i = 0; i < 9; i++) {
-        if (ehValido(tabuleiro, pos, numeros[i])) {
-            tabuleiro[pos] = numeros[i];
-            if (resolverSudoku(tabuleiro, pos + 1)) {
-                return true;
-            }
-            tabuleiro[pos] = '0';
+        if (preencherPosicao(tabuleiro, pos, numeros[i])) {
+            if (resolverCompleto(tabuleiro, pos + 1, numeros)) return tabuleiro;
+            tabuleiro[pos] = '0'; // Backtracking
         }
     }
+    return NULL; // Não foi possível resolver
+} // Resolve o tabuleiro todo e depois tem que mandar o tabuleiro e informação pro server
 
-    return false;
-}
-
-void tentarResolver(char tabuleiro[81], const char* log_file, ConfigCliente config) {
-    if (resolverSudoku(tabuleiro, 0)) {
-        log_event(log_file, config.id_cliente, 0, "Sudoku resolvido com sucesso.");
-    } else {
-        log_event(log_file, config.id_cliente, 0, "Falha ao resolver o Sudoku.");
+void shuffle(char *array, int n) {
+    for (int i = n - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        char temp = array[i];
+        array[i] = array[j];
+        array[j] = temp;
     }
-}*/
+}
 
 /*int main(int argc, char* argv[]) {
     if (argc < 2) {
