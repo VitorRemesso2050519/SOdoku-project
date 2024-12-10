@@ -46,3 +46,4 @@
 #define CODE_SERVER_SHUTDOWN 999            // Server signals impending shutdown to all connected clients
 
 #define CODE_FILL_POSITION 50               // Client fills a position in the Sudoku board
+#define CODE_WRONG_NUMBER 51                // Server says position is incorrect

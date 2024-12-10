@@ -74,7 +74,7 @@ int main(int argc, char* argv[]) {
 
     // Send the initial message to the server
     char buffer[BUFFER_SIZE];
-    snprintf(buffer, BUFFER_SIZE, "%d %d", CODE_NEW_CLIENT, config.id_cliente);
+    snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_NEW_CLIENT);
     if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
         perror("Failed to send initial message to server");
         log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send initial message to server.");
@@ -89,19 +89,19 @@ int main(int argc, char* argv[]) {
         scanf("%d", &command);
         switch (command) {
             case 1:
-                request_new_game(client_socket);
+                request_new_game();
                 break;
             case 2:
                 multiplayer();
                 break;
             case 3:
-                request_game_statistics(client_socket); // sends request to server asking for info on the game client is currently playing
+                request_game_statistics(); // sends request to server asking for info on the game client is currently playing
                 break;
             case 4:
-                request_client_statistics(client_socket); // grabs info from the config file and shows it to the user
+                request_client_statistics(); // grabs info from the config file and shows it to the user
                 break;
             case 0:
-                snprintf(buffer, BUFFER_SIZE, "%d %d", CODE_DISCONNECT, config.id_cliente);
+                snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_DISCONNECT);
                 if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
                     perror("Failed to send disconnect request to server");
                     log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send disconnect request to server.");
@@ -117,7 +117,7 @@ int main(int argc, char* argv[]) {
     }
 }
 
-void request_new_game(int client_socket) {
+void request_new_game() {
     char buffer[BUFFER_SIZE];
     snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_REQUEST_NEW_GAME);
     if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
@@ -283,7 +283,6 @@ void* solve_game_in_increments(void* arg) {
     do {
         attempts++;
         int positions_filled_this_round = 0;
-        char* positions[n]; //this has to be the size of n
 
         // Fill n spaces incrementally
         for (int i = 0; i < 81 && positions_filled_this_round < n; i++) {
@@ -292,6 +291,7 @@ void* solve_game_in_increments(void* arg) {
                     if (preencherPosicao(game_data->tabuleiro, i, number_array[j])) {
                         positions_filled_this_round++;
                         positions[positions_filled_this_round] = i;
+                        log_event(config.log_file, config.id_cliente, CODE_FILL_POSITION, "Filled position %d with number %c.", i, number_array[j]);
                         break;
                     }
                 }
@@ -313,13 +313,20 @@ void* solve_game_in_increments(void* arg) {
             }
         } else {
             // Send the partial solution to the server
-            snprintf(buffer, BUFFER_SIZE, "%d %d %d %s %d", config.id_cliente, CODE_SEND_PARTIAL_SOLUTION, game_data->id_jogo, game_data->tabuleiro, positions_filled_this_round);
+            snprintf(buffer, BUFFER_SIZE, "%d %d %d %s %d", config.id_cliente, CODE_SEND_PARTIAL_SOLUTION, game_data->id_jogo, positions_filled_this_round);
+            char* positions[positions_filled_this_round];
+            char* numbers_in_positions[positions_filled_this_round];
             for (int i = 0; i < positions_filled_this_round; i++) {
-            char pos_str[4];
-            snprintf(pos_str, sizeof(pos_str), " %d", positions[i]);
-            strncat(buffer, pos_str, BUFFER_SIZE - strlen(buffer) - 1);
+                char pos_str[4];
+                snprintf(pos_str, sizeof(pos_str), " %d", positions[i]);
+                strncat(buffer, pos_str, BUFFER_SIZE - strlen(buffer) - 1);
+            }
+            for (int i = 0; i < positions_filled_this_round; i++) {
+                char num_str[4];
+                snprintf(num_str, sizeof(num_str), " %c", numbers_in_positions[i]);
+                strncat(buffer, num_str, BUFFER_SIZE - strlen(buffer) - 1);
+            }
             display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
-        }
             if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
                 perror("Failed to send partial solution to server");
                 log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send partial solution to server.");
@@ -344,10 +351,17 @@ void* solve_game_in_increments(void* arg) {
             log_event(config.log_file, config.id_cliente, CODE_RESPONSE_CORRECT_PARTIAL, "Partial solution is correct.");
         } else if (response_code == CODE_RESPONSE_INCORRECT_PARTIAL) {
             int errors;
-            sscanf(buffer, "%d %d %d %s", &client_id, &response_code, &game_data->id_jogo, &errors, game_data->tabuleiro);
-            printf("Partial solution is incorrect. Contained %d errors. Retrying...\n", errors);
+            sscanf(buffer, "%d %d %d %s", &client_id, &response_code, &game_data->id_jogo, &errors);
+            for (int i = 0; i < errors; i++) {
+                int error_position;
+                sscanf(buffer + 4 + sizeof(int) * 3 + i * sizeof(int), "%d", &error_position);
+                char* log_message = "Position %d with incorrect number.", error_position;
+                log_event(config.log_file, config.id_cliente, CODE_WRONG_NUMBER, log_message);
+                game_data->tabuleiro[error_position] = '0';
+            }
+            printf("Partial solution is incorrect. Contained %d errors.\n", errors);
             display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
-            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_INCORRECT_PARTIAL, "Partial solution is incorrect. Retrying...");
+            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_INCORRECT_PARTIAL, "Partial solution is incorrect.");
             filled_positions -= positions_filled_this_round; // Rollback the filled positions
         } else if (response_code == CODE_RESPONSE_CORRECT_FINAL) {
             printf("Final solution is correct!\n");
@@ -408,7 +422,7 @@ void display_game_status(char* tabuleiro, int id_jogo, double elapsed, time_t st
 
 }//quando ele manda pro server e recebe do server, mostrar display
 
-void request_game_statistics(int client_socket) {
+void request_game_statistics() {
     char buffer[BUFFER_SIZE];
     snprintf(buffer, BUFFER_SIZE, "%d %d %d", config.id_cliente, CODE_REQUEST_STATS, game_data.id_jogo);
     if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
@@ -421,7 +435,7 @@ void request_game_statistics(int client_socket) {
     }
 }
 
-void receive_game_statistics(int client_socket) {
+void receive_game_statistics() {
     char buffer[BUFFER_SIZE];
     ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
     if (bytes_received == -1) {
