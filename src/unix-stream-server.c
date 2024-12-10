@@ -123,7 +123,7 @@ void* client_thread(void* arg) {
                 sscanf(buffer + 4, "%d %s %d %.2f", &game_id, tabuleiro, attempts, record_time); 
 
                 // Validate the client’s solution against the correct solution
-                game = &jogos[game_id];
+                game = jogos[game_id];
                 errors = verificarJogoCompleto(tabuleiro, game.solucao);
 
                 // Prepare a response based on the solution check
@@ -238,7 +238,7 @@ int main(int argc, char* argv[]) {
     lerConfiguracaoServidor(argv[1], &config);
 
     // Carregar os jogos a partir do ficheiro de jogos especificado na configuração
-    carregarJogos(config.path_jogos, jogos);
+    carregarJogos(config.path_jogos, jogos, num_jogos);
 
     // Create a UNIX domain socket
     if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {

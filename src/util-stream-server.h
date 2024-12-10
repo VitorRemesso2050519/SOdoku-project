@@ -8,6 +8,7 @@
 typedef struct {
     char path_jogos[256];  // Path to the game file
     char log_file[256];    // Path to log file
+    int max_clients;       // Maximum number of supported clients
 } ConfigServidor;
 
 // Game structure
