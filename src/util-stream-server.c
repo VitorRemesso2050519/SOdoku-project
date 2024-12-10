@@ -11,6 +11,8 @@
 typedef struct {
     char path_jogos[256];  // Caminho para o ficheiro de jogos
     char log_file[256];    // Caminho para o ficheiro de log
+    int max_clients;       // Número máximo de clientes suportados
+    //probably size of multiplayer room
 } ConfigServidor;
 
 // Definir a estrutura de um jogo
@@ -35,15 +37,16 @@ void lerConfiguracaoServidor(const char* ficheiroConfig, ConfigServidor* config)
         exit(1);
     }
     fscanf(fp, "PATH_JOGOS: %s\n", config->path_jogos);
-    fscanf(fp, "PATH_LOGS: %s\n", config->log_file); 
+    fscanf(fp, "PATH_LOGS: %s\n", config->log_file);
+    fscanf(fp, "MAX_CLIENTS: %d\n", &config->max_clients);
     fclose(fp);
 
     // Print a configuração carregada para verificar
-    printf("Configuração carregada: PATH_JOGOS = %s, LOG_FILE = %s\n", config->path_jogos, config->log_file);
+    printf("Configuração carregada: PATH_JOGOS = %s, LOG_FILE = %s, MAX_CLIENTS = %d\n", config->path_jogos, config->log_file, config->max_clients);
 }
 
 // Função para carregar os jogos a partir de um ficheiro
-void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int* num_jogos) {
+void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int *num_jogos) {
     FILE* fp = fopen(ficheiroJogos, "r");
     if (fp == NULL) {
         printf("Erro ao abrir o ficheiro de jogos!\n");
@@ -57,7 +60,7 @@ void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int* num_jogos) {
     int id;
     char tabuleiro[81];
     char solucao[81];
-    *num_jogos = 0;
+    int num_jogos = 0;
 
     // Ler os jogos e as soluções do ficheiro
     while (fscanf(fp, "%d , %s , %s\n", &id, tabuleiro, solucao) != EOF) {
@@ -67,7 +70,7 @@ void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int* num_jogos) {
         (*num_jogos)++;
     }
     fclose(fp);
-    printf("%d jogos carregados com sucesso.\n", *num_jogos);
+    printf("%d jogos carregados com sucesso.\n", num_jogos);
 }
 
 // Function to read game statistics from the file
@@ -124,8 +127,8 @@ bool escreverEstatisticasJogo(const char* ficheiroEstatisticas, JogoState* jogoS
     return false; // Game ID not found
 }
 
-bool verificarPosicao(char tabuleiro[81], int pos, char solucao_correta[81]) {
-    if (tabuleiro[pos] == solucao_correta[pos]) {
+bool verificarPosicao(char num, int pos, char solucao_correta[81]) {
+    if (num == solucao_correta[pos]) {
         return true;
     } else {
         return false;
@@ -138,7 +141,7 @@ int verificarJogoCompleto(char tabuleiro[81], char solucao_correta[81]) {
         return 0;
     } else {
         for (int i = 0; i < 81; i++) {
-            if(!verificarPosicao(tabuleiro, i, solucao_correta)) {
+            if(!verificarPosicao(tabuleiro[i], i, solucao_correta)) {
                 erro++;
             }
         }
@@ -150,21 +153,6 @@ Jogo grabRandomGame(Jogo jogos[], int num_jogos){
     int random_index = rand() % num_jogos;
     return jogos[random_index];
 }
-
-
-/*const char* verificarMovimento(char tabuleiro[81], int pos, char num, const char solucao_correta[81]) {
-    // Check if the position is empty (i.e., '0') before validating the move
-    if (tabuleiro[pos] != '0') {
-        return "Posição já preenchida.";
-    }
-
-    // Verify that the number matches the correct solution for the position
-    if (solucao_correta[pos] != num) {
-        return "Número incorreto para esta posição.";
-    } else {
-        return "Movimento correto.";
-    }
-}*/
 
 /*int main(int argc, char* argv[]) {
     // Verificar se o ficheiro de configuração foi passado como argumento

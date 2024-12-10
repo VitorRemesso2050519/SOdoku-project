@@ -317,13 +317,10 @@ void* solve_game_in_increments(void* arg) {
             char* positions[positions_filled_this_round];
             char* numbers_in_positions[positions_filled_this_round];
             for (int i = 0; i < positions_filled_this_round; i++) {
-                char pos_str[4];
+                char pos_str[4], num_str[4];
                 snprintf(pos_str, sizeof(pos_str), " %d", positions[i]);
-                strncat(buffer, pos_str, BUFFER_SIZE - strlen(buffer) - 1);
-            }
-            for (int i = 0; i < positions_filled_this_round; i++) {
-                char num_str[4];
                 snprintf(num_str, sizeof(num_str), " %c", numbers_in_positions[i]);
+                strncat(buffer, pos_str, BUFFER_SIZE - strlen(buffer) - 1);
                 strncat(buffer, num_str, BUFFER_SIZE - strlen(buffer) - 1);
             }
             display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
@@ -470,7 +467,7 @@ void request_client_statistics() {
 
 void display_menu() {
     printf("\n========== Sudoku Client Interface ==========\n");
-    printf("1: Request New Game\n");
+    printf("1: Request New Game (Singleplayer)\n");
     printf("2: Multiplayer\n"); //Mudou!
     printf("3: Request Current Game Statistics\n");
     printf("4: View Client Statistics\n");
