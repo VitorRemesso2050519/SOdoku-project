@@ -89,7 +89,7 @@ void* client_thread(void* arg) {
                 // Validate partial solution
                 errors = 0;
                 for (int i = 0; i < n_posicoes; i++) {
-                    if (!verificarPosicao(numeros[i], posicoes[i], game->solucao)) {
+                    if (!verificarPosicao(numeros[i], posicoes[i], game.solucao)) {
                         partial_correct = false;
                         error_positions[errors] = posicoes[i];
                         errors++;
@@ -124,7 +124,7 @@ void* client_thread(void* arg) {
 
                 // Validate the client’s solution against the correct solution
                 game = &jogos[game_id];
-                errors = verificarJogoCompleto(tabuleiro, game->solucao);
+                errors = verificarJogoCompleto(tabuleiro, game.solucao);
 
                 // Prepare a response based on the solution check
                 if (errors == 0) {
