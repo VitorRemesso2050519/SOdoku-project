@@ -19,6 +19,7 @@ pthread_mutex_t log_mutex, record_mutex;
 
 Jogo jogos[100];
 int num_jogos = 0;
+int current_client_ammount = 0;
 
 void* client_thread(void* arg) {
     int client_socket = *(int*)arg, client_id, message_code, game_id, n_posicoes, errors, attempts;
@@ -29,15 +30,10 @@ void* client_thread(void* arg) {
 
     while (1) {
         bool partial_correct = true;
-        // Receive the header from the client
+        // Receive message
         bytes_received = recv(client_socket, buffer, 8, 0);
         if (bytes_received == -1) {
-            perror("Failed to receive message header from client");
-            close(client_socket);
-            return NULL;
-        } else if (bytes_received == 0) {
-            // Client disconnected
-            printf("Client disconnected.\n");
+            perror("Failed to receive message from client");
             close(client_socket);
             return NULL;
         }
@@ -52,6 +48,8 @@ void* client_thread(void* arg) {
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_NEW_CLIENT, "Client connected.");
                 pthread_mutex_unlock(&log_mutex);
+                current_client_ammount++;
+                printf("Current client ammount: %d\n", current_client_ammount);
                 break;
             case CODE_REQUEST_NEW_GAME: { //DONE
                 // Handle new game request
@@ -196,6 +194,8 @@ void* client_thread(void* arg) {
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_DISCONNECT, "Client disconnected.");
                 pthread_mutex_unlock(&log_mutex);
+                current_client_ammount--;
+                printf("Current client ammount: %d\n", current_client_ammount);
                 close(client_socket);
                 return NULL;
             default: //DONE
