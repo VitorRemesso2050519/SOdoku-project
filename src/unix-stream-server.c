@@ -16,7 +16,8 @@
 ConfigServidor config;
 sem_t client_semaphore;
 pthread_mutex_t log_mutex, record_mutex;
-Jogo jogos[100];   // Define capacidade de jogos
+
+Jogo jogos[100];
 int num_jogos = 0;
 
 void* client_thread(void* arg) {
@@ -42,8 +43,7 @@ void* client_thread(void* arg) {
         }
 
         // Parse the header
-        memcpy(&client_id, buffer, 4);
-        memcpy(&message_code, buffer + 4, 4);
+        sscanf(buffer, "%d %d", &client_id, &message_code);
 
         // Process the message based on the message code
         switch (message_code) {
@@ -68,19 +68,7 @@ void* client_thread(void* arg) {
             }
             case CODE_SEND_PARTIAL_SOLUTION:
                 sscanf(buffer + 4, "%d %d", &game_id, &n_posicoes);
-                if (game_id < 0 || game_id >= num_jogos) {
-                    pthread_mutex_lock(&log_mutex);
-                    log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Invalid game ID.");
-                    pthread_mutex_unlock(&log_mutex);
-                    break;
-                }
-                game = &jogos[game_id];
-                if (n_posicoes < 0 || n_posicoes > 81) {
-                    pthread_mutex_lock(&log_mutex);
-                    log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Invalid number of positions.");
-                    pthread_mutex_unlock(&log_mutex);
-                    break;
-                }
+                game = jogos[game_id];
                 //use n_positions to read the positions and numbers from the buffer
                 for (int i = 0; i < n_posicoes; i++) {
                     sscanf(buffer + 8 + i * 5, "%c %d", &numeros[i], &posicoes[i]);
@@ -233,6 +221,9 @@ int main(int argc, char* argv[]) {
         printf("Uso: %s <ficheiro_configuracao>\n", argv[0]);
         return 1;
     }
+
+    Jogo jogos[100];
+    int num_jogos = 0;
 
     // Ler a configuração do servidor
     lerConfiguracaoServidor(argv[1], &config);

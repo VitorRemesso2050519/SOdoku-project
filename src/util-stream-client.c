@@ -11,6 +11,7 @@ typedef struct {
     char log_file[256];    // Caminho para o ficheiro de logs
     bool is_full_or_partial; // Flag para indicar se resolve completo ou parcial
     bool is_vip; // Flag para indicar se é VIP
+    int partial_num; // Número de posições a preencher
     int games_solved;
     int errors_sent;
 } ConfigCliente;
@@ -27,6 +28,7 @@ void lerConfiguracaoCliente(const char* ficheiroConfig, ConfigCliente* config) {
     fscanf(fp, "IP_SERVIDOR: %s\n", config->server_ip);
     fscanf(fp, "PATH_LOGS: %s\n", config->log_file);
     fscanf(fp, "IS_FULL_OR_PARTIAL: %d\n", &config->is_full_or_partial);
+    fscanf(fp, "PARTIAL_NUM: %d\n", &config->partial_num);
     fscanf(fp, "IS_VIP: %d\n", &config->is_vip);
     fscanf(fp, "GAMES_SOLVED: %d\n", &config->games_solved);
     fscanf(fp, "ERRORS_SENT: %d\n", &config->errors_sent);
@@ -75,7 +77,7 @@ bool preencherPosicao(char* tabuleiro, int pos, char num) {
     return false;
 }
 
-char* resolverCompleto(char* tabuleiro, int pos, char* numeros) {
+/*char* resolverCompleto(char* tabuleiro, int pos, char* numeros) {
     if (pos == 81) return tabuleiro; // Tabuleiro completo
     if (tabuleiro[pos] != '0') return resolverCompleto(tabuleiro, pos + 1, numeros);
     // Preenche a posição com um número válido
@@ -86,7 +88,7 @@ char* resolverCompleto(char* tabuleiro, int pos, char* numeros) {
         }
     }
     return NULL; // Não foi possível resolver
-} // Resolve o tabuleiro todo e depois tem que mandar o tabuleiro e informação pro server
+} // Resolve o tabuleiro todo e depois tem que mandar o tabuleiro e informação pro server*/
 
 void shuffle(char *array, int n) {
     for (int i = n - 1; i > 0; i--) {
