@@ -35,7 +35,6 @@ void* solve_game_in_increments(void* arg);
 
 int main(int argc, char* argv[]) {
     struct sockaddr_in server_addr;
-    int client_socket;
     pthread_t solver_thread;
 
     if (argc < 2) {
