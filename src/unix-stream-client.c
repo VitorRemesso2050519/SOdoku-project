@@ -134,7 +134,8 @@ void request_new_game() {
         *game_data = receive_new_game();
         if (game_data->id_jogo != 0) {
             if (config.is_full_or_partial == 0 ) {
-                pthread_create(&solver_thread, NULL, solve_game_complete, game_data);
+                //pthread_create(&solver_thread, NULL, solve_game_complete, game_data);
+                pthread_create(&solver_thread, NULL, solve_game_in_increments, game_data);
                 pthread_detach(&solver_thread); // Detach the thread to avoid resource leaks
             } else if (config.is_full_or_partial == 1) {
                 pthread_create(&solver_thread, NULL, solve_game_in_increments, game_data);
@@ -156,9 +157,13 @@ GameData receive_new_game(){
     }
 
     buffer[bytes_received] = '\0';
-    int response_code, client_id, game_id;
-    char tabuleiro[81];
-    sscanf(buffer, "%d %d %d %s", &client_id, &response_code, &game_id, tabuleiro);
+    printf("Received buffer: %s\n", buffer);
+
+    int response_code = 0, client_id = 0, game_id = 0;
+    char tabuleiro[81]; // Increase size to hold null terminator
+
+    // Use sscanf to parse the integers and the tabuleiro separately
+    sscanf(buffer, "%d %d %d %81s", &client_id, &response_code, &game_id, tabuleiro);
 
     if (response_code == CODE_RESPONSE_NEW_GAME) {
         printf("New game received from the server.\n");
@@ -177,7 +182,7 @@ GameData receive_new_game(){
     return (GameData){0};
 }
 
-void* solve_game_complete(void* arg) { //In theory, this function should solve the game in its entirety (not in increments)
+/*void* solve_game_complete(void* arg) { //In theory, this function should solve the game in its entirety (not in increments)
     GameData* game_data = (GameData*)arg;
     char buffer[BUFFER_SIZE];
     int attempts = 0;
@@ -200,6 +205,7 @@ void* solve_game_complete(void* arg) { //In theory, this function should solve t
                         char message[100]; // Allocate enough space for the message
                         snprintf(message, sizeof(message), "Filled position %d with number %c.", i, number_array[j]);
                         log_event(config.log_file, config.id_cliente, CODE_FILL_POSITION, message);
+                        sleep(1); // Sleep for 1 second to simulate solving time
                         break;
                     }
                 }
@@ -212,7 +218,8 @@ void* solve_game_complete(void* arg) { //In theory, this function should solve t
         
         printf("\nSudoku puzzle solved.\n");
         log_event(config.log_file, config.id_cliente, CODE_RESPONSE_OK, "Sudoku puzzle solved.");
-        snprintf(buffer, BUFFER_SIZE, "%d %d %d %s %d %.2f", config.id_cliente, CODE_SEND_FINAL_SOLUTION, game_data->id_jogo, game_data->tabuleiro, attempts, elapsed_time);
+        snprintf(buffer, BUFFER_SIZE, "%d %d %d %d %.2f %s", config.id_cliente, CODE_SEND_FINAL_SOLUTION, game_data->id_jogo, attempts, elapsed_time, game_data->tabuleiro);
+        printf(buffer);
         if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
             perror("Failed to send solution to server");
             log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send solution to server.");
@@ -271,13 +278,12 @@ void* solve_game_complete(void* arg) { //In theory, this function should solve t
     } while (response_code != CODE_RESPONSE_CORRECT_FINAL);
 
     return NULL;
-}
+}*/
 
 void* solve_game_in_increments(void* arg) {
     GameData* game_data = (GameData*)arg;
-    char buffer[BUFFER_SIZE];
+    char buffer[BUFFER_SIZE], positions[config.partial_num], n_in_positions[config.partial_num];
     int attempts = 0;
-    char positions[config.partial_num];
     int filled_positions = 0;
 
     char number_array[] = {'1','2','3','4','5','6','7','8','9'};
@@ -288,9 +294,16 @@ void* solve_game_in_increments(void* arg) {
     double elapsed_time;
     int response_code;
 
+    for (int i = 0; i < 81; i++) {
+        if (game_data->tabuleiro[i] != '0') {
+            filled_positions++;
+        }
+    }
+
     do {
         attempts++;
         int positions_filled_this_round = 0;
+        printf("\n%d\n",config.partial_num);
 
         // Fill n spaces incrementally
         for (int i = 0; i < 81 && positions_filled_this_round < config.partial_num; i++) {
@@ -299,13 +312,20 @@ void* solve_game_in_increments(void* arg) {
                     if (preencherPosicao(game_data->tabuleiro, i, number_array[j])) {
                         positions_filled_this_round++;
                         positions[positions_filled_this_round] = i;
+                        n_in_positions[positions_filled_this_round] = number_array[j];
                         char message[100]; // Allocate enough space for the message
                         snprintf(message, sizeof(message), "Filled position %d with number %c.", i, number_array[j]);
                         log_event(config.log_file, config.id_cliente, CODE_FILL_POSITION, message);
+                        sleep(1); // Sleep for 1 second to simulate solving time
                         break;
                     }
                 }
             }
+        }
+
+        printf("\n%d positions filled this round.\n", positions_filled_this_round);
+        for (int i = 0; i < positions_filled_this_round; i++) {
+            printf("Position %d filled with number %c.\n", positions[i], n_in_positions[i]);
         }
 
         filled_positions += positions_filled_this_round;
@@ -324,15 +344,14 @@ void* solve_game_in_increments(void* arg) {
         } else {
             // Send the partial solution to the server
             snprintf(buffer, BUFFER_SIZE, "%d %d %d %s %d", config.id_cliente, CODE_SEND_PARTIAL_SOLUTION, game_data->id_jogo, positions_filled_this_round);
-            char* positions[positions_filled_this_round];
-            char* numbers_in_positions[positions_filled_this_round];
             for (int i = 0; i < positions_filled_this_round; i++) {
                 char pos_str[4], num_str[4];
                 snprintf(pos_str, sizeof(pos_str), " %d", positions[i]);
-                snprintf(num_str, sizeof(num_str), " %c", numbers_in_positions[i]);
+                snprintf(num_str, sizeof(num_str), " %c", n_in_positions[i]);
                 strncat(buffer, pos_str, BUFFER_SIZE - strlen(buffer) - 1);
                 strncat(buffer, num_str, BUFFER_SIZE - strlen(buffer) - 1);
             }
+            printf(buffer);
             display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
             if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
                 perror("Failed to send partial solution to server");
@@ -407,6 +426,7 @@ void* solve_game_in_increments(void* arg) {
             filled_positions -= errors; // Rollback the filled positions
         } else {
             printf("Failed to receive solution verification. Server response code: %d\n", response_code);
+            printf(buffer);
             log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive solution verification. Invalid response code.");
             return NULL;
         }

@@ -7,7 +7,6 @@
 // Client-Side Codes
 #define CODE_NEW_CLIENT 00                  // Client registers with the server
 #define CODE_REQUEST_NEW_GAME 10            // Client requests a new Sudoku board
-#define CODE_REQUEST_GAME_STATE 11          // Client requests the current game state (e.g., active players, time elapsed)
 #define CODE_SEND_PARTIAL_SOLUTION 20       // Client submits a partial solution for verification
 #define CODE_SEND_FINAL_SOLUTION 21         // Client submits a complete solution for verification
 #define CODE_REQUEST_STATS 30               // Client requests game statistics, such as fastest completion time or records

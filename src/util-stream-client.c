@@ -37,6 +37,8 @@ void lerConfiguracaoCliente(const char* ficheiroConfig, ConfigCliente* config) {
     // Print a configuração carregada para verificar
     printf("Configuração carregada: ID_CLIENTE = %d, SERVER_IP = %s, LOG_FILE = %s\n", 
            config->id_cliente, config->server_ip, config->log_file);
+    printf("IS_FULL_OR_PARTIAL = %d, PARTIAL_NUM = %d, IS_VIP = %d\n", 
+           config->is_full_or_partial, config->partial_num, config->is_vip);
 }
 
 // Helper function to check if placing a number at a specific position is valid

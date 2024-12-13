@@ -31,15 +31,19 @@ void* client_thread(void* arg) {
     while (1) {
         bool partial_correct = true;
         // Receive message
-        bytes_received = recv(client_socket, buffer, 8, 0);
+        bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
         if (bytes_received == -1) {
             perror("Failed to receive message from client");
             close(client_socket);
             return NULL;
         }
+        buffer[bytes_received] = '\0'; // Ensure null-termination
+        printf("Received message: %s\n", buffer); // Debug print
 
-        // Parse the header
+        // Parse the first two variables in the message
         sscanf(buffer, "%d %d", &client_id, &message_code);
+        printf("Parsed client_id: %d, message_code: %d\n", client_id, message_code); // Debug print
+
 
         // Process the message based on the message code
         switch (message_code) {
@@ -50,22 +54,27 @@ void* client_thread(void* arg) {
                 pthread_mutex_unlock(&log_mutex);
                 current_client_ammount++;
                 printf("Current client ammount: %d\n", current_client_ammount);
+                memset(buffer, 0, BUFFER_SIZE);
                 break;
             case CODE_REQUEST_NEW_GAME: { //DONE
                 // Handle new game request
-                game = grabRandomGame(jogos, 100);
+                game = grabRandomGame(jogos, num_jogos);
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_REQUEST_NEW_GAME, "Client is asking for new game.");
                 pthread_mutex_unlock(&log_mutex);
+                printf("Client %d requested a new game, sending game %d: %s\n", client_id, game.id_jogo, game.tabuleiro);
                 snprintf(buffer, BUFFER_SIZE, "%d %d %d %s", client_id, CODE_RESPONSE_NEW_GAME, game.id_jogo, game.tabuleiro);
-                send(client_socket, buffer, strlen(buffer), 0);
+                if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+                    perror("Send new game");
+                }
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_RESPONSE_NEW_GAME, "New game sent to client.");
                 pthread_mutex_unlock(&log_mutex);
+                memset(buffer, 0, BUFFER_SIZE);
                 break;
             }
             case CODE_SEND_PARTIAL_SOLUTION:
-                sscanf(buffer + 4, "%d %d", &game_id, &n_posicoes);
+                sscanf(buffer, "%d %d %d %d", &client_id, &message_code, &game_id, &n_posicoes);
                 game = jogos[game_id];
                 //use n_positions to read the positions and numbers from the buffer
                 for (int i = 0; i < n_posicoes; i++) {
@@ -98,15 +107,17 @@ void* client_thread(void* arg) {
                     pthread_mutex_unlock(&log_mutex);
                 }
                 send(client_socket, buffer, strlen(buffer), 0);
+                memset(buffer, 0, BUFFER_SIZE);
                 break;
             case CODE_SEND_FINAL_SOLUTION: {
+                printf('WE GOT HERE!');
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_SEND_FINAL_SOLUTION, "Client submitted the final solution.");
                 pthread_mutex_unlock(&log_mutex);
 
                 // Extract the solution sent by the client
 
-                sscanf(buffer + 4, "%d %s %d %.2f", &game_id, tabuleiro, attempts, record_time); 
+                sscanf(buffer, "%d %d %d %d %.2f %81s", &client_id, &message_code, &game_id, &attempts, &record_time, tabuleiro); 
 
                 // Validate the client’s solution against the correct solution
                 game = jogos[game_id];
@@ -160,11 +171,12 @@ void* client_thread(void* arg) {
                     pthread_mutex_unlock(&log_mutex);
                 }
                 if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
-                    perror("send");
+                    perror("Send final solution");
                 }
+                memset(buffer, 0, BUFFER_SIZE);
                 break;
             }
-            case CODE_REQUEST_GAME_STATE: { //DONE
+            case CODE_REQUEST_STATS: { //DONE
                 // Handle game state request
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_REQUEST_STATS, "Client requested game statistics.");
@@ -173,19 +185,20 @@ void* client_thread(void* arg) {
                 if (lerEstatisticasJogo("data/jogos_stats.txt", game_id, &jogoState)) {
                     char record_time_str[9];
                     strftime(record_time_str, sizeof(record_time_str), "%H:%M:%S", localtime(&jogoState.record_time));
-                    snprintf(buffer, BUFFER_SIZE, "%d %d %d %s %d", CODE_RESPONSE_STATS, client_id, jogoState.id_jogo, record_time_str, jogoState.attempts);
+                    snprintf(buffer, BUFFER_SIZE, "%d %d %d %s %d", client_id, CODE_RESPONSE_STATS, jogoState.id_jogo, record_time_str, jogoState.attempts);
                     pthread_mutex_lock(&log_mutex);
                     log_event(config.log_file, client_id, CODE_RESPONSE_STATS, "Server responded with game statistics.");
                     pthread_mutex_unlock(&log_mutex);
                 } else {
-                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_STATS, client_id, -1);
+                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_RESPONSE_STATS, -1);
                     pthread_mutex_lock(&log_mutex);
                     log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Game statistics not found.");
                     pthread_mutex_unlock(&log_mutex);
                 }
                 if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
-                    perror("send");
+                    perror("Send game statistics");
                 }
+                memset(buffer, 0, BUFFER_SIZE);
                 break;
             }
             case CODE_DISCONNECT: //DONE
@@ -196,6 +209,7 @@ void* client_thread(void* arg) {
                 pthread_mutex_unlock(&log_mutex);
                 current_client_ammount--;
                 printf("Current client ammount: %d\n", current_client_ammount);
+                memset(buffer, 0, BUFFER_SIZE);
                 close(client_socket);
                 return NULL;
             default: //DONE
@@ -203,6 +217,7 @@ void* client_thread(void* arg) {
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Unknown message code.");
                 pthread_mutex_unlock(&log_mutex);
+                memset(buffer, 0, BUFFER_SIZE);
                 break;
         }
     }
@@ -222,14 +237,15 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    Jogo jogos[100];
-    int num_jogos = 0;
-
     // Ler a configuração do servidor
     lerConfiguracaoServidor(argv[1], &config);
 
     // Carregar os jogos a partir do ficheiro de jogos especificado na configuração
-    carregarJogos(config.path_jogos, jogos, num_jogos);
+    carregarJogos(config.path_jogos, jogos, &num_jogos);
+
+    for (int i = 0; i < num_jogos; i++) {
+        printf("Game %d: %s\n", jogos[i].id_jogo, jogos[i].tabuleiro);
+    }
 
     // Create a UNIX domain socket
     if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {

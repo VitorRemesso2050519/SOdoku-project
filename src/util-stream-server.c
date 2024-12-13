@@ -47,7 +47,7 @@ void lerConfiguracaoServidor(const char* ficheiroConfig, ConfigServidor* config)
 
 // Função para carregar os jogos a partir de um ficheiro
 // Função para carregar os jogos a partir de um ficheiro
-void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int num_jogos) {
+void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int *num_jogos) {
     FILE* fp = fopen(ficheiroJogos, "r");
     if (fp == NULL) {
         printf("Erro ao abrir o ficheiro de jogos!\n");
@@ -61,17 +61,17 @@ void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int num_jogos) {
     int id;
     char tabuleiro[81];
     char solucao[81];
-    num_jogos = 0;
+    *num_jogos = 0;
 
     // Ler os jogos e as soluções do ficheiro
     while (fscanf(fp, "%d , %s , %s\n", &id, tabuleiro, solucao) != EOF) {
-        jogos[num_jogos].id_jogo = id;
-        strcpy(jogos[num_jogos].tabuleiro, tabuleiro);
-        strcpy(jogos[num_jogos].solucao, solucao);
-        (num_jogos)++;
+        jogos[*num_jogos].id_jogo = id;
+        strcpy(jogos[*num_jogos].tabuleiro, tabuleiro);
+        strcpy(jogos[*num_jogos].solucao, solucao);
+        (*num_jogos)++;
     }
     fclose(fp);
-    printf("%d jogos carregados com sucesso.\n", num_jogos);
+    printf("%d jogos carregados com sucesso.\n", *num_jogos);
 }
 
 // Function to read game statistics from the file
@@ -138,16 +138,12 @@ bool verificarPosicao(char num, int pos, char solucao_correta[81]) {
 
 int verificarJogoCompleto(char tabuleiro[81], char solucao_correta[81]) {
     int erro = 0;
-    if (solucao_correta == tabuleiro) {
-        return 0;
-    } else {
-        for (int i = 0; i < 81; i++) {
-            if(!verificarPosicao(tabuleiro[i], i, solucao_correta)) {
-                erro++;
-            }
+    for (int i = 0; i < 81; i++) {
+        if(!verificarPosicao(tabuleiro[i], i, solucao_correta)) {
+            erro++;
         }
-        return erro;
     }
+        return erro;
 }
 
 Jogo grabRandomGame(Jogo jogos[], int num_jogos){
