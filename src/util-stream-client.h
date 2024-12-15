@@ -8,7 +8,6 @@ typedef struct {
     int id_cliente;        // Client identifier
     char server_ip[16];    // Server IP address
     char log_file[256];    // Path to log file
-    bool is_full_or_partial; // Flag para indicar se resolve completo ou parcial
     bool is_vip; // Flag para indicar se é VIP
     int partial_num; // Número de posições a preencher
     int games_solved;

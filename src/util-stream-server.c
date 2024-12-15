@@ -129,6 +129,7 @@ bool escreverEstatisticasJogo(const char* ficheiroEstatisticas, JogoState* jogoS
 }
 
 bool verificarPosicao(char num, int pos, char solucao_correta[81]) {
+    printf("Verifying position: pos=%d, num=%c, expected=%c\n", pos, num, solucao_correta[pos]);
     if (num == solucao_correta[pos]) {
         return true;
     } else {

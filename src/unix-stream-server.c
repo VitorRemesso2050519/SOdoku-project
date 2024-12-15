@@ -75,15 +75,44 @@ void* client_thread(void* arg) {
             }
             case CODE_SEND_PARTIAL_SOLUTION:
                 sscanf(buffer, "%d %d %d %d", &client_id, &message_code, &game_id, &n_posicoes);
-                game = jogos[game_id];
-                //use n_positions to read the positions and numbers from the buffer
+                printf("Parsed values: client_id=%d, message_code=%d, game_id=%d, n_posicoes=%d\n", client_id, message_code, game_id, n_posicoes);
+
+                // Validate game_id
+                if (game_id < 0 || game_id > num_jogos) {
+                    printf("Invalid game_id: %d\n", game_id);
+                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_RESPONSE_ERROR, game_id);
+                    send(client_socket, buffer, strlen(buffer), 0);
+                    memset(buffer, 0, BUFFER_SIZE);
+                    break;
+                }
+
+                game = jogos[game_id-1];
+                printf("Game solution: %s\n", game.solucao); // Debug print
+
+                // Use n_positions to read the positions and numbers from the buffer
+                int offset = 0;
+                for (int i = 0; i < 4; i++) {
+                    while (buffer[offset] != ' ') offset++;
+                    offset++;
+                }
+
                 for (int i = 0; i < n_posicoes; i++) {
-                    sscanf(buffer + 8 + i * 5, "%c %d", &numeros[i], &posicoes[i]);
+                    int pos;
+                    int num;
+                    sscanf(buffer + offset, "%d %d", &pos, &num);
+                    posicoes[i] = pos;
+                    numeros[i] = num + '0'; // Convert integer to character
+                    printf("Parsed position and number: posicoes[%d]=%d, numeros[%d]=%c\n", i, posicoes[i], i, numeros[i]);
+                    while (buffer[offset] != ' ' && buffer[offset] != '\0') offset++;
+                    offset++;
+                    while (buffer[offset] != ' ' && buffer[offset] != '\0') offset++;
+                    offset++;
                 }
 
                 // Validate partial solution
                 errors = 0;
                 for (int i = 0; i < n_posicoes; i++) {
+                    printf("Checking position %d with number %c\n", posicoes[i], numeros[i]);
                     if (!verificarPosicao(numeros[i], posicoes[i], game.solucao)) {
                         partial_correct = false;
                         error_positions[errors] = posicoes[i];
@@ -91,12 +120,12 @@ void* client_thread(void* arg) {
                     }
                 }
                 if (partial_correct) {
-                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_CORRECT_PARTIAL, client_id, 0);
+                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_RESPONSE_CORRECT_PARTIAL, 0);
                     pthread_mutex_lock(&log_mutex);
                     log_event(config.log_file, client_id, CODE_RESPONSE_CORRECT_PARTIAL, "Partial solution is correct.");
                     pthread_mutex_unlock(&log_mutex);
                 } else {
-                    snprintf(buffer, BUFFER_SIZE, "%d %d %d ", CODE_RESPONSE_INCORRECT_PARTIAL, client_id, errors);
+                    snprintf(buffer, BUFFER_SIZE, "%d %d %d ", client_id, CODE_RESPONSE_INCORRECT_PARTIAL, errors);
                     for (int i = 0; i < errors; i++) {
                         char pos_str[4];
                         snprintf(pos_str, sizeof(pos_str), "%d ", error_positions[i]);
@@ -106,11 +135,11 @@ void* client_thread(void* arg) {
                     log_event(config.log_file, client_id, CODE_RESPONSE_INCORRECT_PARTIAL, "Partial solution is incorrect.");
                     pthread_mutex_unlock(&log_mutex);
                 }
+                printf("Sending response: %s\n", buffer); // Debug print
                 send(client_socket, buffer, strlen(buffer), 0);
                 memset(buffer, 0, BUFFER_SIZE);
                 break;
             case CODE_SEND_FINAL_SOLUTION: {
-                printf('WE GOT HERE!');
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_SEND_FINAL_SOLUTION, "Client submitted the final solution.");
                 pthread_mutex_unlock(&log_mutex);
@@ -120,7 +149,7 @@ void* client_thread(void* arg) {
                 sscanf(buffer, "%d %d %d %d %.2f %81s", &client_id, &message_code, &game_id, &attempts, &record_time, tabuleiro); 
 
                 // Validate the client’s solution against the correct solution
-                game = jogos[game_id];
+                game = jogos[game_id-1];
                 errors = verificarJogoCompleto(tabuleiro, game.solucao);
 
                 // Prepare a response based on the solution check

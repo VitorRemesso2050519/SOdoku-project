@@ -9,7 +9,6 @@ typedef struct {
     int id_cliente;        // Identificador do cliente
     char server_ip[16];    // IP do servidor
     char log_file[256];    // Caminho para o ficheiro de logs
-    bool is_full_or_partial; // Flag para indicar se resolve completo ou parcial
     bool is_vip; // Flag para indicar se é VIP
     int partial_num; // Número de posições a preencher
     int games_solved;
@@ -27,7 +26,6 @@ void lerConfiguracaoCliente(const char* ficheiroConfig, ConfigCliente* config) {
     fscanf(fp, "ID_CLIENTE: %d\n", &config->id_cliente);
     fscanf(fp, "IP_SERVIDOR: %s\n", config->server_ip);
     fscanf(fp, "PATH_LOGS: %s\n", config->log_file);
-    fscanf(fp, "IS_FULL_OR_PARTIAL: %d\n", &config->is_full_or_partial);
     fscanf(fp, "IS_VIP: %d\n", &config->is_vip);
     fscanf(fp, "PARTIAL_NUM: %d\n", &config->partial_num);
     fscanf(fp, "GAMES_SOLVED: %d\n", &config->games_solved);
@@ -37,8 +35,8 @@ void lerConfiguracaoCliente(const char* ficheiroConfig, ConfigCliente* config) {
     // Print a configuração carregada para verificar
     printf("Configuração carregada: ID_CLIENTE = %d, SERVER_IP = %s, LOG_FILE = %s\n", 
            config->id_cliente, config->server_ip, config->log_file);
-    printf("IS_FULL_OR_PARTIAL = %d, PARTIAL_NUM = %d, IS_VIP = %d\n", 
-           config->is_full_or_partial, config->partial_num, config->is_vip);
+    printf("PARTIAL_NUM = %d, IS_VIP = %d\n", 
+           config->partial_num, config->is_vip);
 }
 
 // Helper function to check if placing a number at a specific position is valid
@@ -79,19 +77,6 @@ bool preencherPosicao(char* tabuleiro, int pos, char num) {
     return false;
 }
 
-/*char* resolverCompleto(char* tabuleiro, int pos, char* numeros) {
-    if (pos == 81) return tabuleiro; // Tabuleiro completo
-    if (tabuleiro[pos] != '0') return resolverCompleto(tabuleiro, pos + 1, numeros);
-    // Preenche a posição com um número válido
-    for (int i = 0; i < 9; i++) {
-        if (preencherPosicao(tabuleiro, pos, numeros[i])) {
-            if (resolverCompleto(tabuleiro, pos + 1, numeros)) return tabuleiro;
-            tabuleiro[pos] = '0'; // Backtracking
-        }
-    }
-    return NULL; // Não foi possível resolver
-} // Resolve o tabuleiro todo e depois tem que mandar o tabuleiro e informação pro server*/
-
 void shuffle(char *array, int n) {
     for (int i = n - 1; i > 0; i--) {
         int j = rand() % (i + 1);
@@ -100,6 +85,7 @@ void shuffle(char *array, int n) {
         array[j] = temp;
     }
 }
+
 
 /*int main(int argc, char* argv[]) {
     if (argc < 2) {
