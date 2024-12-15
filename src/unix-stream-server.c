@@ -145,8 +145,8 @@ void* client_thread(void* arg) {
                 pthread_mutex_unlock(&log_mutex);
 
                 // Extract the solution sent by the client
-
-                sscanf(buffer, "%d %d %d %d %.2f %81s", &client_id, &message_code, &game_id, &attempts, &record_time, tabuleiro); 
+                sscanf(buffer, "%d %d %d %d %lf %80[^\n]", &client_id, &message_code, &game_id, &attempts, &record_time, tabuleiro);
+                printf("%s\n", tabuleiro); // Debug print
 
                 // Validate the client’s solution against the correct solution
                 game = jogos[game_id-1];
@@ -154,56 +154,56 @@ void* client_thread(void* arg) {
 
                 // Prepare a response based on the solution check
                 if (errors == 0) {
-                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_CORRECT_FINAL, client_id);
+                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_RESPONSE_CORRECT_FINAL);
                     send(client_socket, buffer, strlen(buffer), 0);
                     pthread_mutex_lock(&log_mutex);
                     log_event(config.log_file, client_id, CODE_RESPONSE_CORRECT_FINAL, "Final client solution is correct.");
                     pthread_mutex_unlock(&log_mutex);
 
-                    // Update game statistics
-                    JogoState jogoState;
-                    jogoState.id_jogo = game_id;
-                    jogoState.attempts = attempts; // Update this with the actual number of attempts
-                    jogoState.record_time = record_time; // Update this with the actual record time
+                // Update game statistics
+                JogoState jogoState;
+                jogoState.id_jogo = game_id;
+                jogoState.attempts = attempts; // Update this with the actual number of attempts
+                jogoState.record_time = record_time; // Update this with the actual record time
 
-                    JogoState existingState;
-                    pthread_mutex_lock(&record_mutex);
-                    if (lerEstatisticasJogo("data/jogos_stats.txt", game_id, &existingState)) {
-                        if (difftime(jogoState.record_time, existingState.record_time) < 0 ||
-                            (difftime(jogoState.record_time, existingState.record_time) == 0 && jogoState.attempts < existingState.attempts)) {
-                            if (escreverEstatisticasJogo("data/jogos_stats.txt", &jogoState)) {
-                                pthread_mutex_lock(&log_mutex);
-                                log_event(config.log_file, client_id, CODE_NEW_RECORD, "Game statistics updated successfully. New record!");
-                                snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_NEW_RECORD, client_id);
-                                send(client_socket, buffer, strlen(buffer), 0);
-                                pthread_mutex_unlock(&log_mutex);
-                            } else {
-                                pthread_mutex_lock(&log_mutex);
-                                log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Failed to update game statistics.");
-                                pthread_mutex_unlock(&log_mutex);
-                            }
-                        } else {
-                            pthread_mutex_lock(&log_mutex);
-                            log_event(config.log_file, client_id, CODE_NOT_RECORD, "New statistics are not better than existing ones.");
-                            pthread_mutex_unlock(&log_mutex);
-                            snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_NOT_RECORD, client_id);
-                            send(client_socket, buffer, strlen(buffer), 0);
-                        }
+                JogoState existingState;
+                pthread_mutex_lock(&record_mutex);
+                if (lerEstatisticasJogo("data/jogos_stats.txt", game_id, &existingState)) {
+                    if (difftime(jogoState.record_time, existingState.record_time) < 0 ||
+                        (difftime(jogoState.record_time, existingState.record_time) == 0 && jogoState.attempts < existingState.attempts)) {
+                    if (escreverEstatisticasJogo("data/jogos_stats.txt", &jogoState)) {
+                        pthread_mutex_lock(&log_mutex);
+                        log_event(config.log_file, client_id, CODE_NEW_RECORD, "Game statistics updated successfully. New record!");
+                        snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_NEW_RECORD);
+                        send(client_socket, buffer, strlen(buffer), 0);
+                        pthread_mutex_unlock(&log_mutex);
+                    } else {
+                        pthread_mutex_lock(&log_mutex);
+                        log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Failed to update game statistics.");
+                        pthread_mutex_unlock(&log_mutex);
                     }
-                    pthread_mutex_unlock(&record_mutex);
                 } else {
-                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", CODE_RESPONSE_INCORRECT_FINAL, client_id, errors);
-                    char log_message[BUFFER_SIZE];
-                    snprintf(log_message, BUFFER_SIZE, "Final client solution had %d errors.", errors);
                     pthread_mutex_lock(&log_mutex);
-                    log_event(config.log_file, client_id, CODE_RESPONSE_INCORRECT_FINAL, log_message);
+                    log_event(config.log_file, client_id, CODE_NOT_RECORD, "New statistics are not better than existing ones.");
                     pthread_mutex_unlock(&log_mutex);
+                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_NOT_RECORD);
+                    send(client_socket, buffer, strlen(buffer), 0);
                 }
-                if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
-                    perror("Send final solution");
-                }
-                memset(buffer, 0, BUFFER_SIZE);
-                break;
+            }
+            pthread_mutex_unlock(&record_mutex);
+            } else {
+                snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_RESPONSE_INCORRECT_FINAL, errors);
+                char log_message[BUFFER_SIZE];
+                snprintf(log_message, BUFFER_SIZE, "Final client solution had %d errors.", errors);
+                pthread_mutex_lock(&log_mutex);
+                log_event(config.log_file, client_id, CODE_RESPONSE_INCORRECT_FINAL, log_message);
+                pthread_mutex_unlock(&log_mutex);
+            }
+            if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+                perror("Send final solution");
+            }
+            memset(buffer, 0, BUFFER_SIZE);
+            break;
             }
             case CODE_REQUEST_STATS: { //DONE
                 // Handle game state request
