@@ -114,10 +114,12 @@ bool escreverEstatisticasJogo(const char* ficheiroEstatisticas, JogoState* jogoS
     while ((pos = ftell(fp)) != -1 && fgets(line, sizeof(line), fp)) {
         int id;
         sscanf(line, "%d", &id);
+        printf("Read ID: %d, looking for ID: %d\n", id, jogoState->id_jogo); // Debug print
         if (id == jogoState->id_jogo) {
             fseek(fp, pos, SEEK_SET);
             char record_time_str[9];
             strftime(record_time_str, sizeof(record_time_str), "%H:%M:%S", localtime(&jogoState->record_time));
+            printf("Writing new statistics: %d , %d , %s , %d\n", jogoState->id_jogo, jogoState->client_id, record_time_str, jogoState->attempts); // Debug print
             fprintf(fp, "%d , %d , %s , %d\n", jogoState->id_jogo, jogoState->client_id, record_time_str, jogoState->attempts);
             fclose(fp);
             return true;
@@ -125,6 +127,7 @@ bool escreverEstatisticasJogo(const char* ficheiroEstatisticas, JogoState* jogoS
     }
 
     fclose(fp);
+    printf("Game ID not found in statistics file.\n"); // Debug print
     return false; // Game ID not found
 }
 

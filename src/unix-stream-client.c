@@ -308,6 +308,8 @@ void* solve_game_in_increments(void* arg) {
             printf("Final solution is correct!\n");
             log_event(config.log_file, config.id_cliente, CODE_RESPONSE_CORRECT_FINAL, "Final solution is correct.");
             display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
+            memset(buffer, 0, BUFFER_SIZE);
+
             // Wait for record status message from server
             bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
             if (bytes_received == -1) {
@@ -331,6 +333,7 @@ void* solve_game_in_increments(void* arg) {
                 return NULL;
             }
             memset(buffer, 0, BUFFER_SIZE);
+            display_menu();
             break;
         } else if (response_code == CODE_RESPONSE_INCORRECT_FINAL) {
             int errors;

@@ -20,6 +20,7 @@ typedef struct {
 
 // Game state structure
 typedef struct {
+    int client_id;         // Client identifier
     int id_jogo;           // Game identifier
     int attempts;          // Solution attempts
     time_t record_time;    // Record time for the game
