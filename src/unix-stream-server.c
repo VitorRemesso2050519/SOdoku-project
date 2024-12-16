@@ -167,22 +167,21 @@ void* client_thread(void* arg) {
                     jogoState.client_id = client_id;
                     jogoState.id_jogo = game_id;
                     jogoState.attempts = attempts;
-                    jogoState.record_time = (time_t)record_time;
+                    jogoState.record_time = record_time;
 ~
-                    printf("Updating game statistics: id_jogo=%d, attempts=%d, record_time=%ld\n", jogoState.id_jogo, jogoState.attempts, jogoState.record_time); // Debug print
+                    printf("Updating game statistics: client_id=%d, id_jogo=%d, attempts=%d, record_time=%.2f\n", jogoState.client_id, jogoState.id_jogo, jogoState.attempts, jogoState.record_time); // Debug print
 
                     JogoState existingState;
                     pthread_mutex_lock(&record_mutex);
                     printf("Attempting to read game statistics...\n"); // Debug print
-                    if (lerEstatisticasJogo("data/jogos_stats.txt", game_id, &existingState)) {
+                    if (lerEstatisticasJogo(config.path_stats, game_id, &existingState)) {
                         printf("Game statistics read successfully.\n"); // Debug print
-                        if (difftime(jogoState.record_time, existingState.record_time) < 0 ||
-                            (difftime(jogoState.record_time, existingState.record_time) == 0 && jogoState.attempts < existingState.attempts)) {
+                        if (jogoState.record_time < existingState.record_time ||
+                            (jogoState.record_time == existingState.record_time && jogoState.attempts < existingState.attempts)) {
                             printf("New record detected. Attempting to write game statistics...\n"); // Debug print
-                            printf("Before writing: id_jogo=%d, attempts=%d, record_time=%ld\n", jogoState.id_jogo, jogoState.attempts, jogoState.record_time); // Debug print
-                            printf("jogoState before writing: id_jogo=%d, client_id=%d, attempts=%d, record_time=%ld\n", jogoState.id_jogo, jogoState.client_id, jogoState.attempts, jogoState.record_time); // Debug print
-                            if (escreverEstatisticasJogo("data/jogos_stats.txt", &jogoState)) {
-                                printf("After writing: id_jogo=%d, attempts=%d, record_time=%ld\n", jogoState.id_jogo, jogoState.attempts, jogoState.record_time); // Debug print
+                            printf("jogoState before writing: id_jogo=%d, client_id=%d, attempts=%d, record_time=%.2f\n", jogoState.id_jogo, jogoState.client_id, jogoState.attempts, jogoState.record_time); // Debug print
+                            if (escreverEstatisticasJogo(config.path_stats, jogoState.client_id, jogoState.id_jogo, jogoState.attempts, jogoState.record_time)) {
+                                printf("After writing: id_jogo=%d, client_id=%d, attempts=%d, record_time=%.2f\n", jogoState.id_jogo, jogoState.client_id, jogoState.attempts, jogoState.record_time); // Debug print
                                 pthread_mutex_lock(&log_mutex);
                                 log_event(config.log_file, client_id, CODE_NEW_RECORD, "Game statistics updated successfully. New record!");
                                 snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_NEW_RECORD);
@@ -278,6 +277,9 @@ int main(int argc, char* argv[]) {
         printf("Uso: %s <ficheiro_configuracao>\n", argv[0]);
         return 1;
     }
+
+    // Seed the random number generator
+    srand(time(NULL));
 
     // Ler a configuração do servidor
     lerConfiguracaoServidor(argv[1], &config);

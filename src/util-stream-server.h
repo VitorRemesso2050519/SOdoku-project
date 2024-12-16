@@ -8,6 +8,7 @@
 typedef struct {
     char path_jogos[256];  // Path to the game file
     char log_file[256];    // Path to log file
+    char path_stats[256];  // Path to statistics file
     int max_clients;       // Maximum number of supported clients
 } ConfigServidor;
 
@@ -23,7 +24,7 @@ typedef struct {
     int client_id;         // Client identifier
     int id_jogo;           // Game identifier
     int attempts;          // Solution attempts
-    time_t record_time;    // Record time for the game
+    double record_time;    // Record time for the game
 } JogoState;
 
 // Function to read server configuration from a file
@@ -45,6 +46,6 @@ Jogo grabRandomGame(Jogo jogos[], int num_jogos);
 bool lerEstatisticasJogo(const char* ficheiroEstatisticas, int game_id, JogoState* jogoState);
 
 // Function to write game statistics to a file
-bool escreverEstatisticasJogo(const char* ficheiroEstatisticas, JogoState* jogoState);
+bool escreverEstatisticasJogo(const char* ficheiroEstatisticas, int client_id, int id_jogo, int attempts, double record_time);
 
 #endif // UTIL_STREAM_SERVER_H

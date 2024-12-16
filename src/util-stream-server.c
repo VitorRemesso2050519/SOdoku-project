@@ -11,6 +11,7 @@
 typedef struct {
     char path_jogos[256];  // Caminho para o ficheiro de jogos
     char log_file[256];    // Caminho para o ficheiro de log
+    char path_stats[256];  // Caminho para o ficheiro de estatísticas
     int max_clients;       // Número máximo de clientes suportados
     //probably size of multiplayer room
 } ConfigServidor;
@@ -26,7 +27,7 @@ typedef struct {
     int id_jogo;
     int client_id;
     int attempts;          // Solution attempts
-    time_t record_time;    // Record time for the game
+    double record_time;       // Record time for the game
 } JogoState;
 
 // Função para ler o ficheiro de configuração do servidor
@@ -38,11 +39,12 @@ void lerConfiguracaoServidor(const char* ficheiroConfig, ConfigServidor* config)
     }
     fscanf(fp, "PATH_JOGOS: %s\n", config->path_jogos);
     fscanf(fp, "PATH_LOGS: %s\n", config->log_file);
+    fscanf(fp, "PATH_STATS: %s\n", config->path_stats);
     fscanf(fp, "MAX_CLIENTS: %d\n", &config->max_clients);
     fclose(fp);
 
     // Print a configuração carregada para verificar
-    printf("Configuração carregada: PATH_JOGOS = %s, LOG_FILE = %s, MAX_CLIENTS = %d\n", config->path_jogos, config->log_file, config->max_clients);
+    printf("Configuração carregada: PATH_JOGOS = %s, LOG_FILE = %s, PATH_STATS=%s, MAX_CLIENTS = %d\n", config->path_jogos, config->log_file, config->path_stats, config->max_clients);
 }
 
 // Função para carregar os jogos a partir de um ficheiro
@@ -76,6 +78,7 @@ void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int *num_jogos) {
 
 // Function to read game statistics from the file
 bool lerEstatisticasJogo(const char* ficheiroEstatisticas, int game_id, JogoState* jogoState) {
+    printf("Opening statistics file: %s\n", ficheiroEstatisticas); // Debug print
     FILE* fp = fopen(ficheiroEstatisticas, "r");
     if (fp == NULL) {
         printf("Erro ao abrir o ficheiro de estatísticas!\n");
@@ -84,43 +87,61 @@ bool lerEstatisticasJogo(const char* ficheiroEstatisticas, int game_id, JogoStat
 
     char line[256];
     while (fgets(line, sizeof(line), fp)) {
+        printf("Read line: %s", line); // Debug print
         int id, client_id, attempts;
         char record_time_str[9];
-        sscanf(line, "%d , %d , %8s , %d", &id, &client_id, record_time_str, &attempts);
-        if (id == game_id) {
-            jogoState->id_jogo = id;
-            jogoState->client_id = client_id;
-            jogoState->attempts = attempts;
-            strptime(record_time_str, "%H:%M:%S", &jogoState->record_time);
-            fclose(fp);
-            return true;
+        if (sscanf(line, "%d , %d , %8s , %d", &id, &client_id, record_time_str, &attempts) == 4) {
+            printf("Parsed values: id=%d, client_id=%d, record_time_str=%s, attempts=%d\n", id, client_id, record_time_str, attempts); // Debug print
+            if (id == game_id) {
+                jogoState->id_jogo = id;
+                jogoState->client_id = client_id;
+                jogoState->attempts = attempts;
+
+                // Convert H:M:S to float (total seconds)
+                int hours, minutes, seconds;
+                sscanf(record_time_str, "%2d:%2d:%2d", &hours, &minutes, &seconds);
+                jogoState->record_time = hours * 3600 + minutes * 60 + seconds;
+
+                fclose(fp);
+                printf("Game statistics found and parsed successfully.\n"); // Debug print
+                printf("Game ID: %d, Client ID: %d, Record Time: %.2f, Attempts: %d\n", jogoState->id_jogo, jogoState->client_id, jogoState->record_time, jogoState->attempts); // Debug print
+                return true;
+            }
         }
     }
 
     fclose(fp);
+    printf("Game ID not found in statistics file.\n"); // Debug print
     return false; // Game ID not found
 }
 
 // Function to write game statistics to the file
-bool escreverEstatisticasJogo(const char* ficheiroEstatisticas, JogoState* jogoState) {
+bool escreverEstatisticasJogo(const char* ficheiroEstatisticas, int client_id, int id_jogo, int attempts, double record_time) {
     FILE* fp = fopen(ficheiroEstatisticas, "r+");
     if (fp == NULL) {
         printf("Erro ao abrir o ficheiro de estatísticas!\n");
         return false;
     }
-
+    printf("jogoState: id_jogo=%d, client_id=%d, record_time=%.2f, attempts=%d\n", id_jogo, client_id, record_time, attempts); // Debug print
     char line[256];
     long pos;
-    while ((pos = ftell(fp)) != -1 && fgets(line, sizeof(line), fp)) {
-        int id;
-        sscanf(line, "%d", &id);
-        printf("Read ID: %d, looking for ID: %d\n", id, jogoState->id_jogo); // Debug print
-        if (id == jogoState->id_jogo) {
+    while (fgets(line, sizeof(line), fp)) {
+        pos = ftell(fp) - strlen(line);
+        int game_id;
+        sscanf(line, "%d", &game_id);
+        printf("Read ID: %d, looking for ID: %d\n", game_id, id_jogo); // Debug print
+        if (game_id == id_jogo) {
             fseek(fp, pos, SEEK_SET);
+
+            // Convert float (total seconds) to H:M:S
+            int hours = (int)record_time / 3600;
+            int minutes = ((int)record_time % 3600) / 60;
+            int seconds = (int)record_time % 60;
             char record_time_str[9];
-            strftime(record_time_str, sizeof(record_time_str), "%H:%M:%S", localtime(&jogoState->record_time));
-            printf("Writing new statistics: %d , %d , %s , %d\n", jogoState->id_jogo, jogoState->client_id, record_time_str, jogoState->attempts); // Debug print
-            fprintf(fp, "%d , %d , %s , %d\n", jogoState->id_jogo, jogoState->client_id, record_time_str, jogoState->attempts);
+            snprintf(record_time_str, sizeof(record_time_str), "%02d:%02d:%02d", hours, minutes, seconds);
+
+            printf("Writing new statistics: %d , %d , %s , %d\n", id_jogo, client_id, record_time_str, attempts); // Debug print
+            fprintf(fp, "%d , %d , %s , %d\n", id_jogo, client_id, record_time_str, attempts);
             fclose(fp);
             return true;
         }
