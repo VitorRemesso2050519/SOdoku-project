@@ -5,6 +5,7 @@
 #include <time.h>
 #include <utils.h>
 #include "unix.h"
+#include <semaphore.h>
 #include <stdbool.h>
 
 // Definir a estrutura de configuração do servidor
@@ -13,7 +14,7 @@ typedef struct {
     char log_file[256];    // Caminho para o ficheiro de log
     char path_stats[256];  // Caminho para o ficheiro de estatísticas
     int max_clients;       // Número máximo de clientes suportados
-    //probably size of multiplayer room
+    int room_size;         // Tamanho da sala de competição
 } ConfigServidor;
 
 // Definir a estrutura de um jogo
@@ -30,6 +31,14 @@ typedef struct {
     double record_time;       // Record time for the game
 } JogoState;
 
+typedef struct {
+    sem_t mutex;
+    sem_t turnstile1;
+    sem_t turnstile2;
+    int count;
+    int num_threads;
+} Barrier;
+
 // Função para ler o ficheiro de configuração do servidor
 void lerConfiguracaoServidor(const char* ficheiroConfig, ConfigServidor* config) {
     FILE* fp = fopen(ficheiroConfig, "r");
@@ -41,10 +50,12 @@ void lerConfiguracaoServidor(const char* ficheiroConfig, ConfigServidor* config)
     fscanf(fp, "PATH_LOGS: %s\n", config->log_file);
     fscanf(fp, "PATH_STATS: %s\n", config->path_stats);
     fscanf(fp, "MAX_CLIENTS: %d\n", &config->max_clients);
+    fscanf(fp, "ROOM_SIZE: %d\n", &config->room_size);
+    
     fclose(fp);
 
     // Print a configuração carregada para verificar
-    printf("Configuração carregada: PATH_JOGOS = %s, LOG_FILE = %s, PATH_STATS=%s, MAX_CLIENTS = %d\n", config->path_jogos, config->log_file, config->path_stats, config->max_clients);
+    printf("Configuração carregada: PATH_JOGOS = %s, LOG_FILE = %s, PATH_STATS=%s, MAX_CLIENTS = %d, ROOM_SIZE = %d\n", config->path_jogos, config->log_file, config->path_stats, config->max_clients, config->room_size);
 }
 
 // Função para carregar os jogos a partir de um ficheiro
@@ -174,6 +185,38 @@ int verificarJogoCompleto(char tabuleiro[81], char solucao_correta[81]) {
 Jogo grabRandomGame(Jogo jogos[], int num_jogos){
     int random_index = rand() % num_jogos;
     return jogos[random_index];
+}
+
+void barrier_init(Barrier* barrier, int num_threads) {
+    sem_init(&barrier->mutex, 0, 1);
+    sem_init(&barrier->turnstile1, 0, 0);
+    sem_init(&barrier->turnstile2, 0, 1);
+    barrier->count = 0;
+    barrier->num_threads = num_threads;
+}
+
+void barrier_wait(Barrier* barrier) {
+    sem_wait(&barrier->mutex);
+    barrier->count++;
+    if (barrier->count == barrier->num_threads) {
+        sem_wait(&barrier->turnstile2);
+        sem_post(&barrier->turnstile1);
+    }
+    sem_post(&barrier->mutex);
+
+    sem_wait(&barrier->turnstile1);
+    sem_post(&barrier->turnstile1);
+
+    sem_wait(&barrier->mutex);
+    barrier->count--;
+    if (barrier->count == 0) {
+        sem_wait(&barrier->turnstile1);
+        sem_post(&barrier->turnstile2);
+    }
+    sem_post(&barrier->mutex);
+
+    sem_wait(&barrier->turnstile2);
+    sem_post(&barrier->turnstile2);
 }
 
 /*int main(int argc, char* argv[]) {

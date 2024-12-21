@@ -14,15 +14,17 @@
 #define BUFFER_SIZE 1024
 
 ConfigServidor config;
-sem_t client_semaphore;
+sem_t client_semaphore, vip_semaphore, normal_semaphore;
 pthread_mutex_t log_mutex, record_mutex;
+Barrier room_barrier;
 
 Jogo jogos[100];
+Jogo multiplayer_game;
 int num_jogos = 0;
 int current_client_ammount = 0;
 
 void* client_thread(void* arg) {
-    int client_socket = *(int*)arg, client_id, message_code, game_id, n_posicoes, errors, attempts;
+    int client_socket = *(int*)arg, client_id, message_code, game_id, n_posicoes, errors, attempts, is_vip;
     char buffer[BUFFER_SIZE], tabuleiro[81], numeros[81], posicoes[81], error_positions[81];
     double record_time;
     Jogo game;
@@ -35,6 +37,7 @@ void* client_thread(void* arg) {
         if (bytes_received == -1) {
             perror("Failed to receive message from client");
             close(client_socket);
+            sem_post(&client_semaphore);
             return NULL;
         }
         buffer[bytes_received] = '\0'; // Ensure null-termination
@@ -172,6 +175,7 @@ void* client_thread(void* arg) {
                     printf("Updating game statistics: client_id=%d, id_jogo=%d, attempts=%d, record_time=%.2f\n", jogoState.client_id, jogoState.id_jogo, jogoState.attempts, jogoState.record_time); // Debug print
 
                     JogoState existingState;
+                    sleep(1);
                     pthread_mutex_lock(&record_mutex);
                     printf("Attempting to read game statistics...\n"); // Debug print
                     if (lerEstatisticasJogo(config.path_stats, game_id, &existingState)) {
@@ -210,9 +214,9 @@ void* client_thread(void* arg) {
                     pthread_mutex_lock(&log_mutex);
                     log_event(config.log_file, client_id, CODE_RESPONSE_INCORRECT_FINAL, log_message);
                     pthread_mutex_unlock(&log_mutex);
-                }
-                if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
-                    perror("Send final solution");
+                    if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+                        perror("Send final solution");
+                    }
                 }
                 memset(buffer, 0, BUFFER_SIZE);
                 break;
@@ -242,6 +246,35 @@ void* client_thread(void* arg) {
                 memset(buffer, 0, BUFFER_SIZE);
                 break;
             }
+            case CODE_REQUEST_COMPETITION_JOIN:
+                // Handle competition join request (WIP)
+                sscanf(buffer, "%d %d %d", &client_id, &message_code, &is_vip);
+
+                snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_NOTIFY_COMPETITION_JOIN);
+                send(client_socket, buffer, strlen(buffer), 0);
+
+                pthread_mutex_lock(&log_mutex);
+                log_event(config.log_file, client_id, CODE_REQUEST_COMPETITION_JOIN, "Client joined the competition.");
+                pthread_mutex_unlock(&log_mutex);
+
+                if (is_vip) {
+                    sem_post(&vip_semaphore); // Signal that a VIP client is waiting
+                    barrier_wait(&room_barrier); // VIP clients wait at the barrier
+                } else {
+                    sem_post(&normal_semaphore); // Signal that a normal client is waiting
+                    // Wait for all VIP clients to pass
+                    while (sem_trywait(&vip_semaphore) == 0) {
+                    // Do nothing, just wait for VIP clients to pass
+                    }
+                    barrier_wait(&room_barrier); // Normal clients wait at the barrier
+                }
+                
+                snprintf(buffer, BUFFER_SIZE, "%d %d %d %s", client_id, CODE_NOTIFY_COMPETITION_START, multiplayer_game.id_jogo, multiplayer_game.tabuleiro);
+                if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+                    perror("Send competition game");
+                }
+
+                break;
             case CODE_DISCONNECT: //DONE
                 // Handle client disconnection
                 printf("Client %d disconnected.\n", client_id);
@@ -264,6 +297,7 @@ void* client_thread(void* arg) {
     }
 
     close(client_socket);
+    sem_post(&client_semaphore);
     return NULL;
 }
 
@@ -317,6 +351,7 @@ int main(int argc, char* argv[]) {
     printf("Server listening on %s:%d\n", inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port));
 
     sem_init(&client_semaphore, 0, config.max_clients);
+    barrier_init(&room_barrier, config.room_size);
 
     // Inicializar o mutex para os logs
     if (pthread_mutex_init(&log_mutex, NULL) != 0) {
@@ -324,15 +359,21 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    multiplayer_game = grabRandomGame(jogos, num_jogos);
+    printf("Chosen multiplayer game: %d\n", multiplayer_game.id_jogo);
+
     // Main server loop
     while (1) {
         // Initialize addr_len before accepting a new client connection
         addr_len = sizeof(client_addr);
 
+        sem_wait(&client_semaphore);
+
         // Accept a new client connection
         client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &addr_len);
         if (client_socket == -1) {
             perror("Failed to accept client connection");
+            sem_post(&client_semaphore);
             continue;
         }
 
@@ -341,7 +382,8 @@ int main(int argc, char* argv[]) {
         int* new_sock = malloc(sizeof(int));
         if (new_sock == NULL) {
             perror("Failed to allocate memory for new socket");
-            close(client_socket);
+            close(client_socket);~
+            sem_post(&client_semaphore);
             continue;
         }
         *new_sock = client_socket;
@@ -349,6 +391,7 @@ int main(int argc, char* argv[]) {
             perror("Failed to create thread");
             free(new_sock);
             close(client_socket);
+            sem_post(&client_semaphore);
             continue;
         }
 

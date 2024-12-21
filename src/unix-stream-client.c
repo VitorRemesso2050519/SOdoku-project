@@ -92,7 +92,7 @@ int main(int argc, char* argv[]) {
                 request_new_game();
                 break;
             case 2:
-                //multiplayer();
+                multiplayerpvp();
                 break;
             case 3:
                 request_game_statistics(); // sends request to server asking for info on the game client is currently playing
@@ -154,7 +154,7 @@ GameData receive_new_game(){
     printf("Received buffer: %s\n", buffer);
 
     int response_code = 0, client_id = 0, game_id = 0;
-    char tabuleiro[81]; // Increase size to hold null terminator
+    char tabuleiro[81];
 
     // Use sscanf to parse the integers and the tabuleiro separately
     sscanf(buffer, "%d %d %d %81s", &client_id, &response_code, &game_id, tabuleiro);
@@ -174,6 +174,56 @@ GameData receive_new_game(){
     }
     memset(buffer, 0, BUFFER_SIZE);
     return (GameData){0};
+}
+
+void multiplayerpvp() {
+    char buffer[BUFFER_SIZE];
+    int client_id, response_code, game_id;
+    char tabuleiro[81];
+    snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_REQUEST_COMPETITION_JOIN);
+    if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+        perror("Failed to send new game request to server");
+        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send new game request to server.");
+    }
+
+    ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+    if (bytes_received == -1) {
+        perror("Failed to receive new game from server");
+        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game from server.");
+        return;
+    }
+
+    sscanf(buffer, "%d %d", &client_id, &response_code);
+
+    if(response_code == CODE_NOTIFY_COMPETITION_JOIN) {
+        printf("You have joined the competition.\n");
+        log_event(config.log_file, config.id_cliente, CODE_NOTIFY_COMPETITION_JOIN, "You have joined the competition.");
+    } else {
+        printf("Failed to join the competition or room is full. Server response code: %d\n", response_code);
+        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to join the competition. Invalid response code.");
+        return;
+    }
+
+    ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+    if (bytes_received == -1) {
+        perror("Failed to receive new game from server");
+        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game from server.");
+        return;
+    }
+
+    sscanf(buffer, "%d %d %d %s", &client_id, &response_code, &game_id, tabuleiro);
+
+    GameData game_data;
+    game_data.id_jogo = game_id;
+    memcpy(game_data.tabuleiro, tabuleiro, 81);
+    current_game_id = game_id; // Update the global variable
+
+    pthread_create(&solver_thread, NULL, solve_game_in_increments, game_data);
+    pthread_detach(&solver_thread); // Detach the thread to avoid resource leaks
+
+    // receive game id and tabuleiro from servidor but wait for other players on server
+    // when we receive confirmation from server that all players are ready, we start the game
+    // we use the same function as the single player game to solve the game
 }
 
 void* solve_game_in_increments(void* arg) {
@@ -343,14 +393,19 @@ void* solve_game_in_increments(void* arg) {
             log_event(config.log_file, config.id_cliente, CODE_RESPONSE_INCORRECT_FINAL, "Final solution is incorrect. Retrying...");
             filled_positions -= errors; // Rollback the filled positions
             memset(buffer, 0, BUFFER_SIZE);
+        } else if (response_code == CODE_NOTIFY_COMPETITION_WINNER) {
+            int winner_id;
+            sscanf(buffer, "%d %d %d", &client_id, &response_code, &winner_id);
+            printf("Competition winner is client %d. Stopping the game.\n", winner_id);
+            log_event(config.log_file, config.id_cliente, CODE_NOTIFY_COMPETITION_WINNER, "Competition winner announced. Stopping the game.");
         } else {
             printf("Failed to receive solution verification. Server response code: %d\n", response_code);
             log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive solution verification. Invalid response code.");
             return NULL;
         }
 
-    } while (response_code != CODE_RESPONSE_CORRECT_FINAL);
-
+    } while (response_code != CODE_RESPONSE_CORRECT_FINAL || response_code != CODE_NOTIFY_COMPETITION_WINNER);
+    memset(buffer, 0, BUFFER_SIZE);
     return NULL;
 }
 

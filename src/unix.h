@@ -28,13 +28,9 @@
 #define CODE_RESPONSE_INCORRECT_FINAL 113   // Server indicates that the submitted final solution is incorrect
 
 // Competitive Multiplayer Updates
-#define CODE_REQUEST_COMPETITION_CREATE 40  // Client requests to create a competitive multiplayer game
 #define CODE_REQUEST_COMPETITION_JOIN 41    // Client requests to join a competitive multiplayer game
-#define CODE_REQUEST_COMPETITION_START 42   // Client requests to start a competitive multiplayer game
-#define CODE_REQUEST_COMPETITION_LEAVE 43   // Client requests to leave a competitive multiplayer game
-#define CODE_NOTIFY_COMPETITION_CREATE 130  // Server notifies the client when a multiplayer game is created
+#define CODE_NOTIFY_COMPETITION_JOIN 130    // Server notifies the client that they have joined a multiplayer game
 #define CODE_NOTIFY_NEW_COMPETITOR 131      // Server notifies the client when a new competitor joins the game
-#define CODE_NOTIFY_COMPETITION_LEAVE 132   // Server notifies the client when a competitor leaves the game
 #define CODE_NOTIFY_COMPETITION_START 133   // Server notifies the client when the game starts
 #define CODE_NOTIFY_COMPETITION_WINNER 139  // Server announces the winner of a multiplayer game, therefore ending competition
 // Needs more codes probably
