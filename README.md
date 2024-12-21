@@ -11,15 +11,19 @@ Projeto de SO de sudoku.
 ## Formatos dos config files:
 
 ### Servidor
+'''
 PATH_JOGOS: (data/jogos.txt)
 PATH_LOGS: (logs/server.log)
 PATH_STATS: (data/jogos_stats.txt)
 MAX_CLIENTS: (int, de 0 para cima)
 ROOM_SIZE: (int, de preferência entre 0 e MAX_CLIENTS)
+'''
 
 ### Cliente
+'''
 ID_CLIENTE: (int, de 0 para cima)
 IP_SERVIDOR: (127.0.0.1)
 PATH_LOGS: (logs/client.log)
 IS_VIP: (bool (0 ou 1))
 PARTIAL_NUM: (int, entre 0 e 81)
+'''
