@@ -6,7 +6,7 @@ Projeto de SO de sudoku.
 2. Com duas janelas abertas diferentes. Uma será para o Servidor e outra para o Cliente.
 3. Numa das janelas, escreva "./server config/server.config". Isto irá inicializar o Servidor.
 4. COM O SERVIDOR A CORRER, na outra janela escreva "./client config/client.config". Isto irá inicializar o Cliente.
-    4.1. Poderá correr outros ficheiros configs, mas use o mesmo formato disponível a seguir.
+- Poderá correr outros ficheiros configs, mas use o mesmo formato disponível a seguir.
 
 ## Formatos dos config files:
 
