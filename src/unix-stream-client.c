@@ -30,27 +30,134 @@ GameData receive_new_game();
 void receive_game_statistics();
 void display_menu();
 void display_game_status();
-void* solve_game_complete(void* arg);
+void multiplayerpvp();
+void* multi_client_thread(void* arg);
 void* solve_game_in_increments(void* arg);
 
 int main(int argc, char* argv[]) {
-    struct sockaddr_in server_addr;
-    pthread_t solver_thread;
-
     if (argc < 2) {
-        printf("Uso: %s <ficheiro_configuracao>\n", argv[0]);
+        printf("Uso: %s <ficheiro_configuracao> [num_clients] [singleplayer/multiplayer]\n", argv[0]);
         return 1;
     }
 
-    // Inicializar a configuração do cliente
-    lerConfiguracaoCliente(argv[1], &config);
-    log_event(config.log_file, config.id_cliente, 0, "Client configuration loaded.");
+    if (argc == 2) {
+
+        // Inicializar a configuração do cliente
+        lerConfiguracaoCliente(argv[1], &config);
+        log_event(config.log_file, config.id_cliente, 0, "Client configuration loaded.");
+
+        // Original single client mode
+        struct sockaddr_in server_addr;
+        pthread_t solver_thread;
+
+        // Create a socket
+        if ((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+            perror("Failed to create socket");
+            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to create socket.");
+            exit(EXIT_FAILURE);
+        }
+
+        // Set up the server address structure
+        memset(&server_addr, 0, sizeof(server_addr));
+        server_addr.sin_family = AF_INET;
+        server_addr.sin_port = htons(PORT);
+        if (inet_pton(AF_INET, config.server_ip, &server_addr.sin_addr) <= 0) {
+            perror("Invalid address/ Address not supported");
+            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Invalid address/ Address not supported.");
+            exit(EXIT_FAILURE);
+        }
+
+        // Connect to the server
+        if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+            perror("Failed to connect to server");
+            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to connect to server.");
+            exit(EXIT_FAILURE);
+        }
+        printf("Connected to the server.\n");
+        log_event(config.log_file, config.id_cliente, CODE_NEW_CLIENT, "Connected to the server.");
+
+        // Send the initial message to the server
+        char buffer[BUFFER_SIZE];
+        snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_NEW_CLIENT);
+        if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+            perror("Failed to send initial message to server");
+            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send initial message to server.");
+            exit(EXIT_FAILURE);
+        }
+
+        // Main loop to handle user commands
+        int command;
+        while (1) {
+            display_menu();
+            scanf("%d", &command);
+            switch (command) {
+                case 1:
+                    request_new_game();
+                    break;
+                case 2:
+                    multiplayerpvp();
+                    break;
+                case 3:
+                    request_game_statistics(); // sends request to server asking for info on the game client is currently playing
+                    break;
+                case 4:
+                    request_client_statistics(); // grabs info from the config file and shows it to the user
+                    break;
+                case 0:
+                    snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_DISCONNECT);
+                    if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+                        perror("Failed to send disconnect request to server");
+                        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send disconnect request to server.");
+                    }
+                    close(client_socket);
+                    printf("Disconnected from the server.\n");
+                    log_event(config.log_file, config.id_cliente, CODE_DISCONNECT, "Disconnected from the server.");
+                    return 0;
+                default:
+                    printf("Invalid command.\n");
+                    break;
+            }
+        }
+    } else if (argc == 4) {
+        // Multi-client mode //WIP!!!
+        int num_clients = atoi(argv[2]);
+        char* mode = argv[3];
+        pthread_t* threads = malloc(num_clients * sizeof(pthread_t));
+        
+        if (mode == NULL || (strcmp(mode, "singleplayer") != 0 && strcmp(mode, "multiplayer") != 0)) {
+            printf("Invalid mode.\n");
+            return 1;
+        }
+
+        for (int i = 0; i < num_clients; i++) {
+            if (pthread_create(&threads[i], NULL, multi_client_thread, (void*)mode) != 0) {
+                perror("Failed to create client thread");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        for (int i = 0; i < num_clients; i++) {
+            pthread_join(threads[i], NULL);
+        }
+
+        free(threads);
+    } else {
+        printf("Invalid number of arguments.\n");
+        return 1;
+    }
+
+    return 0;
+}
+
+void* multi_client_thread(){
+    char* mode = (char*)arg;
+    struct sockaddr_in server_addr;
 
     // Create a socket
     if ((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("Failed to create socket");
         log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to create socket.");
-        exit(EXIT_FAILURE);
+        pthread_exit(NULL);
     }
 
     // Set up the server address structure
@@ -60,14 +167,14 @@ int main(int argc, char* argv[]) {
     if (inet_pton(AF_INET, config.server_ip, &server_addr.sin_addr) <= 0) {
         perror("Invalid address/ Address not supported");
         log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Invalid address/ Address not supported.");
-        exit(EXIT_FAILURE);
+        pthread_exit(NULL);
     }
 
     // Connect to the server
     if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
         perror("Failed to connect to server");
         log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to connect to server.");
-        exit(EXIT_FAILURE);
+        pthread_exit(NULL);
     }
     printf("Connected to the server.\n");
     log_event(config.log_file, config.id_cliente, CODE_NEW_CLIENT, "Connected to the server.");
@@ -78,43 +185,19 @@ int main(int argc, char* argv[]) {
     if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
         perror("Failed to send initial message to server");
         log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send initial message to server.");
-        exit(EXIT_FAILURE);
+        pthread_exit(NULL);
     }
 
-    // Main loop to handle user commands
-    int command;
-    while (1) {
-        char buffer[BUFFER_SIZE];
-        display_menu();
-        scanf("%d", &command);
-        switch (command) {
-            case 1:
-                request_new_game();
-                break;
-            case 2:
-                multiplayerpvp();
-                break;
-            case 3:
-                request_game_statistics(); // sends request to server asking for info on the game client is currently playing
-                break;
-            case 4:
-                request_client_statistics(); // grabs info from the config file and shows it to the user
-                break;
-            case 0:
-                snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_DISCONNECT);
-                if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
-                    perror("Failed to send disconnect request to server");
-                    log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send disconnect request to server.");
-                }
-                close(client_socket);
-                printf("Disconnected from the server.\n");
-                log_event(config.log_file, config.id_cliente, CODE_DISCONNECT, "Disconnected from the server.");
-                return 0;
-            default:
-                printf("Invalid command.\n");
-                break;
-        }
+    if (strcmp(mode, "singleplayer") == 0) {
+        request_new_game();
+    } else if (strcmp(mode, "multiplayer") == 0) {
+        multiplayerpvp();
+    } else {
+        printf("Invalid mode.\n");
+        pthread_exit(NULL);
     }
+
+    pthread_exit(NULL);
 }
 
 void request_new_game() {
@@ -212,18 +295,23 @@ void multiplayerpvp() {
     }
 
     sscanf(buffer, "%d %d %d %s", &client_id, &response_code, &game_id, tabuleiro);
+    if(response_code = CODE_NOTIFY_COMPETITION_START){
+        printf("Competition has started.\n");
+        log_event(config.log_file, config.id_cliente, CODE_NOTIFY_COMPETITION_START, "Competition has started.");
 
-    GameData game_data;
-    game_data.id_jogo = game_id;
-    memcpy(game_data.tabuleiro, tabuleiro, 81);
-    current_game_id = game_id; // Update the global variable
+        GameData game_data;
+        game_data.id_jogo = game_id;
+        memcpy(game_data.tabuleiro, tabuleiro, 81);
+        current_game_id = game_id; // Update the global variable
 
-    pthread_create(&solver_thread, NULL, solve_game_in_increments, game_data);
-    pthread_detach(&solver_thread); // Detach the thread to avoid resource leaks
+        pthread_create(&solver_thread, NULL, solve_game_in_increments, game_data);
+        pthread_detach(&solver_thread); // Detach the thread to avoid resource leaks
 
-    // receive game id and tabuleiro from servidor but wait for other players on server
-    // when we receive confirmation from server that all players are ready, we start the game
-    // we use the same function as the single player game to solve the game
+    } else {
+        printf("Failed to start the competition. Server response code: %d\n", response_code);
+        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to start the competition. Invalid response code.");
+        return;
+    }
 }
 
 void* solve_game_in_increments(void* arg) {
@@ -393,18 +481,50 @@ void* solve_game_in_increments(void* arg) {
             log_event(config.log_file, config.id_cliente, CODE_RESPONSE_INCORRECT_FINAL, "Final solution is incorrect. Retrying...");
             filled_positions -= errors; // Rollback the filled positions
             memset(buffer, 0, BUFFER_SIZE);
+        } else if (response_code == CODE_NOTIFY_COMPETITION_END) {
+            int winner_id;
+            sscanf(buffer, "%d %d %d", &client_id, &response_code, &winner_id);
+            printf("PVP Competition winner is client %d. Stopping the game.\n", winner_id);
+            log_event(config.log_file, config.id_cliente, CODE_NOTIFY_COMPETITION_END, "Competition winner announced. Stopping the game.");
         } else if (response_code == CODE_NOTIFY_COMPETITION_WINNER) {
             int winner_id;
             sscanf(buffer, "%d %d %d", &client_id, &response_code, &winner_id);
-            printf("Competition winner is client %d. Stopping the game.\n", winner_id);
-            log_event(config.log_file, config.id_cliente, CODE_NOTIFY_COMPETITION_WINNER, "Competition winner announced. Stopping the game.");
+            printf("You won the PVP competition!\n", winner_id);
+            log_event(config.log_file, config.id_cliente, CODE_NOTIFY_COMPETITION_WINNER, "Won the competition! Stopping the game.");
+
+            memset(buffer, 0, BUFFER_SIZE);
+
+            // Wait for record status message from server
+            bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+            if (bytes_received == -1) {
+                perror("Failed to receive record status from server");
+                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive record status from server.");
+                return NULL;
+            }
+            buffer[bytes_received] = '\0';
+            int record_code;
+            sscanf(buffer, "%d %d", &client_id, &record_code);
+
+            if (record_code == CODE_NEW_RECORD) {
+                printf("New record achieved!\n");
+                log_event(config.log_file, config.id_cliente, CODE_NEW_RECORD, "New record achieved.");
+            } else if (record_code == CODE_NOT_RECORD) {
+                printf("Solution is correct but not a new record. Sorry!\n");
+                log_event(config.log_file, config.id_cliente, CODE_NOT_RECORD, "Solution is correct but not a new record.");
+            } else {
+                printf("Failed to receive valid record status. Server response code: %d\n", record_code);
+                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive valid record status. Invalid response code.");
+                return NULL;
+            }
+            memset(buffer, 0, BUFFER_SIZE);
+
         } else {
             printf("Failed to receive solution verification. Server response code: %d\n", response_code);
             log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive solution verification. Invalid response code.");
             return NULL;
         }
 
-    } while (response_code != CODE_RESPONSE_CORRECT_FINAL || response_code != CODE_NOTIFY_COMPETITION_WINNER);
+    } while (response_code != CODE_RESPONSE_CORRECT_FINAL || response_code != CODE_NOTIFY_COMPETITION_WINNER || response_code != CODE_NOTIFY_COMPETITION_END);  
     memset(buffer, 0, BUFFER_SIZE);
     return NULL;
 }
