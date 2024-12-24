@@ -22,9 +22,18 @@ Jogo jogos[100];
 Jogo multiplayer_game;
 int num_jogos = 0;
 int current_client_ammount = 0;
+bool competition_winner = false;
+
+typedef struct {
+    int client_socket;
+    bool is_competing;
+} ClientData;
 
 void* client_thread(void* arg) {
-    int client_socket = *(int*)arg, client_id, message_code, game_id, n_posicoes, errors, attempts, is_vip;
+    ClientData* client_data = (ClientData*)arg;
+    int client_socket = client_data->client_socket;
+    bool is_competing = client_data->is_competing;
+    int client_id, message_code, game_id, n_posicoes, errors, attempts, is_vip;
     char buffer[BUFFER_SIZE], tabuleiro[81], numeros[81], posicoes[81], error_positions[81];
     double record_time;
     Jogo game;
@@ -157,6 +166,19 @@ void* client_thread(void* arg) {
 
                 // Prepare a response based on the solution check
                 if (errors == 0) {
+
+                    pthread_mutex_lock(&competition_mutex);
+                    if (competition_winner) {
+                        // Notify the client that someone else has already won
+                        snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_NOTIFY_COMPETITION_END);
+                        send(client_socket, buffer, strlen(buffer), 0);
+                        pthread_mutex_unlock(&competition_mutex);
+                        break;
+                    } else {
+                        competition_winner = true;
+                        pthread_mutex_unlock(&competition_mutex);
+                    }
+
                     snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_RESPONSE_CORRECT_FINAL);
                     send(client_socket, buffer, strlen(buffer), 0);
                     pthread_mutex_lock(&log_mutex);
@@ -250,11 +272,15 @@ void* client_thread(void* arg) {
                 // Handle competition join request (WIP)
                 sscanf(buffer, "%d %d %d", &client_id, &message_code, &is_vip);
 
+                pthread_mutex_lock(&log_mutex);
+                log_event(config.log_file, client_id, CODE_REQUEST_COMPETITION_JOIN, "Client joined the competition.");
+                pthread_mutex_unlock(&log_mutex);
+
                 snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_NOTIFY_COMPETITION_JOIN);
                 send(client_socket, buffer, strlen(buffer), 0);
 
                 pthread_mutex_lock(&log_mutex);
-                log_event(config.log_file, client_id, CODE_REQUEST_COMPETITION_JOIN, "Client joined the competition.");
+                log_event(config.log_file, client_id, CODE_NOTIFY_COMPETITION_JOIN, "Client joined the competition.");
                 pthread_mutex_unlock(&log_mutex);
 
                 if (is_vip) {
@@ -273,6 +299,8 @@ void* client_thread(void* arg) {
                 if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
                     perror("Send competition game");
                 }
+
+                is_competing = true;
 
                 break;
             case CODE_DISCONNECT: //DONE
@@ -376,6 +404,17 @@ int main(int argc, char* argv[]) {
             sem_post(&client_semaphore);
             continue;
         }
+
+        ClientData* client_data = malloc(sizeof(ClientData));
+        if (client_data == NULL) {
+            perror("Failed to allocate memory for client data");
+            close(client_socket);
+            sem_post(&client_semaphore);
+            continue;
+        }
+
+        client_data->client_socket = client_socket;
+        client_data->is_competing = false;
 
         // Create a thread to handle the client
         pthread_t thread_id;
