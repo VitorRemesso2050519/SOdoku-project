@@ -15,7 +15,7 @@
 
 ConfigServidor config;
 sem_t client_semaphore, vip_semaphore, normal_semaphore;
-pthread_mutex_t log_mutex, record_mutex;
+pthread_mutex_t log_mutex, record_mutex, competition_mutex;
 Barrier room_barrier;
 
 Jogo jogos[100];
@@ -32,7 +32,7 @@ typedef struct {
 void* client_thread(void* arg) {
     ClientData* client_data = (ClientData*)arg;
     int client_socket = client_data->client_socket;
-    bool is_competing = client_data->is_competing;
+    bool is_competing = false; // Initialize to false
     int client_id, message_code, game_id, n_posicoes, errors, attempts, is_vip;
     char buffer[BUFFER_SIZE], tabuleiro[81], numeros[81], posicoes[81], error_positions[81];
     double record_time;
@@ -40,6 +40,7 @@ void* client_thread(void* arg) {
     ssize_t bytes_received;
 
     while (1) {
+        printf(is_competing ? "Is a competitor.\n" : "Is not a competitor.\n");
         bool partial_correct = true;
         // Receive message
         bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
@@ -56,10 +57,9 @@ void* client_thread(void* arg) {
         sscanf(buffer, "%d %d", &client_id, &message_code);
         printf("Parsed client_id: %d, message_code: %d\n", client_id, message_code); // Debug print
 
-
         // Process the message based on the message code
         switch (message_code) {
-            case CODE_NEW_CLIENT: //DONE
+            case CODE_NEW_CLIENT:
                 printf("Client %d connected.\n", client_id);
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_NEW_CLIENT, "Client connected.");
@@ -68,7 +68,7 @@ void* client_thread(void* arg) {
                 printf("Current client ammount: %d\n", current_client_ammount);
                 memset(buffer, 0, BUFFER_SIZE);
                 break;
-            case CODE_REQUEST_NEW_GAME: { //DONE
+            case CODE_REQUEST_NEW_GAME: {
                 // Handle new game request
                 game = grabRandomGame(jogos, num_jogos);
                 pthread_mutex_lock(&log_mutex);
@@ -193,7 +193,7 @@ void* client_thread(void* arg) {
                     jogoState.id_jogo = game_id;
                     jogoState.attempts = attempts;
                     jogoState.record_time = record_time;
-~
+
                     printf("Updating game statistics: client_id=%d, id_jogo=%d, attempts=%d, record_time=%.2f\n", jogoState.client_id, jogoState.id_jogo, jogoState.attempts, jogoState.record_time); // Debug print
 
                     JogoState existingState;
@@ -243,7 +243,7 @@ void* client_thread(void* arg) {
                 memset(buffer, 0, BUFFER_SIZE);
                 break;
             }
-            case CODE_REQUEST_STATS: { //DONE
+            case CODE_REQUEST_STATS: {
                 // Handle game state request
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_REQUEST_STATS, "Client requested game statistics.");
@@ -269,7 +269,7 @@ void* client_thread(void* arg) {
                 break;
             }
             case CODE_REQUEST_COMPETITION_JOIN:
-                // Handle competition join request (WIP)
+                // Handle competition join request
                 sscanf(buffer, "%d %d %d", &client_id, &message_code, &is_vip);
 
                 pthread_mutex_lock(&log_mutex);
@@ -300,10 +300,10 @@ void* client_thread(void* arg) {
                     perror("Send competition game");
                 }
 
-                is_competing = true;
+                is_competing = true; // Set to true when the client joins a competition
 
                 break;
-            case CODE_DISCONNECT: //DONE
+            case CODE_DISCONNECT:
                 // Handle client disconnection
                 printf("Client %d disconnected.\n", client_id);
                 pthread_mutex_lock(&log_mutex);
@@ -314,7 +314,7 @@ void* client_thread(void* arg) {
                 memset(buffer, 0, BUFFER_SIZE);
                 close(client_socket);
                 return NULL;
-            default: //DONE
+            default:
                 printf("Unknown message code %d from client %d.\n", message_code, client_id);
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Unknown message code.");
@@ -421,7 +421,7 @@ int main(int argc, char* argv[]) {
         int* new_sock = malloc(sizeof(int));
         if (new_sock == NULL) {
             perror("Failed to allocate memory for new socket");
-            close(client_socket);~
+            close(client_socket);
             sem_post(&client_semaphore);
             continue;
         }

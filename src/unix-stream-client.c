@@ -13,24 +13,30 @@
 #define BUFFER_SIZE 1024
 #define PORT 8080
 
-ConfigCliente config;
 pthread_mutex_t solver_thread = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 int client_socket;
 int current_game_id = -1;
 
 typedef struct {
     int id_jogo;
     char tabuleiro[81]; // 81 characters
+    ConfigCliente* client_config;
 } GameData;
 
-void request_new_game();
-void request_game_statistics();
-void request_client_statistics();
-GameData receive_new_game();
-void receive_game_statistics();
+typedef struct {
+    ConfigCliente* client_config;
+    char* mode;
+} ThreadArgs;
+
+void request_new_game(ConfigCliente* client_config, int thread_socket);
+//void request_game_statistics();
+//void request_client_statistics();
+GameData receive_new_game(ConfigCliente* client_config, int thread_socket);
+//void receive_game_statistics();
 void display_menu();
 void display_game_status();
-void multiplayerpvp();
+void multiplayerpvp(ConfigCliente* client_config, int thread_socket);
 void* multi_client_thread(void* arg);
 void* solve_game_in_increments(void* arg);
 
@@ -41,10 +47,14 @@ int main(int argc, char* argv[]) {
     }
 
     if (argc == 2) {
+        
+        ConfigCliente config;
 
         // Inicializar a configuração do cliente
         lerConfiguracaoCliente(argv[1], &config);
+        pthread_mutex_lock(&log_mutex);
         log_event(config.log_file, config.id_cliente, 0, "Client configuration loaded.");
+        pthread_mutex_unlock(&log_mutex);
 
         // Original single client mode
         struct sockaddr_in server_addr;
@@ -53,7 +63,9 @@ int main(int argc, char* argv[]) {
         // Create a socket
         if ((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
             perror("Failed to create socket");
+            pthread_mutex_lock(&log_mutex);
             log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to create socket.");
+            pthread_mutex_unlock(&log_mutex);
             exit(EXIT_FAILURE);
         }
 
@@ -63,27 +75,36 @@ int main(int argc, char* argv[]) {
         server_addr.sin_port = htons(PORT);
         if (inet_pton(AF_INET, config.server_ip, &server_addr.sin_addr) <= 0) {
             perror("Invalid address/ Address not supported");
+            pthread_mutex_lock(&log_mutex);
             log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Invalid address/ Address not supported.");
+            pthread_mutex_unlock(&log_mutex);
             exit(EXIT_FAILURE);
         }
 
         // Connect to the server
         if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
             perror("Failed to connect to server");
+            pthread_mutex_lock(&log_mutex);
             log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to connect to server.");
+            pthread_mutex_unlock(&log_mutex);
             exit(EXIT_FAILURE);
         }
         printf("Connected to the server.\n");
+        pthread_mutex_lock(&log_mutex);
         log_event(config.log_file, config.id_cliente, CODE_NEW_CLIENT, "Connected to the server.");
+        pthread_mutex_unlock(&log_mutex);
 
         // Send the initial message to the server
         char buffer[BUFFER_SIZE];
         snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_NEW_CLIENT);
         if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
             perror("Failed to send initial message to server");
+            pthread_mutex_lock(&log_mutex);
             log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send initial message to server.");
+            pthread_mutex_unlock(&log_mutex);
             exit(EXIT_FAILURE);
         }
+        memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after sending
 
         // Main loop to handle user commands
         int command;
@@ -92,26 +113,30 @@ int main(int argc, char* argv[]) {
             scanf("%d", &command);
             switch (command) {
                 case 1:
-                    request_new_game();
+                    request_new_game(&config, client_socket);
                     break;
                 case 2:
-                    multiplayerpvp();
+                    multiplayerpvp(&config, client_socket);
                     break;
                 case 3:
-                    request_game_statistics(); // sends request to server asking for info on the game client is currently playing
+                    //request_game_statistics(); // sends request to server asking for info on the game client is currently playing
                     break;
                 case 4:
-                    request_client_statistics(); // grabs info from the config file and shows it to the user
+                    //request_client_statistics(); // grabs info from the config file and shows it to the user
                     break;
                 case 0:
                     snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_DISCONNECT);
                     if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
                         perror("Failed to send disconnect request to server");
+                        pthread_mutex_lock(&log_mutex);
                         log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send disconnect request to server.");
+                        pthread_mutex_lock(&log_mutex);
                     }
                     close(client_socket);
                     printf("Disconnected from the server.\n");
+                    pthread_mutex_lock(&log_mutex);
                     log_event(config.log_file, config.id_cliente, CODE_DISCONNECT, "Disconnected from the server.");
+                    pthread_mutex_lock(&log_mutex);
                     return 0;
                 default:
                     printf("Invalid command.\n");
@@ -130,7 +155,30 @@ int main(int argc, char* argv[]) {
         }
 
         for (int i = 0; i < num_clients; i++) {
-            if (pthread_create(&threads[i], NULL, multi_client_thread, (void*)mode) != 0) {
+            //create config for each client
+            //Requires a common log file for all clients
+            ConfigCliente* client_config = malloc(sizeof(ConfigCliente));
+            if (client_config == NULL) {
+                perror("Failed to allocate memory for client configuration");
+                exit(EXIT_FAILURE);
+            }
+
+            client_config->id_cliente = i + 1;
+            strcpy(client_config->server_ip, "127.0.0.1");
+            strcpy(client_config->log_file, "logs/common.log");
+            client_config->is_vip = rand() % 2; // Randomize between 0 and 1
+            client_config->partial_num = rand() % 81 + 1; // Randomize between 1 and 81
+
+            // Create thread data
+            ThreadArgs* thread_data = malloc(sizeof(ThreadArgs));
+            if (thread_data == NULL) {
+                perror("Failed to allocate memory for thread data");
+                exit(EXIT_FAILURE);
+            }
+            thread_data->client_config = client_config;
+            thread_data->mode = mode;
+
+            if (pthread_create(&threads[i], NULL, multi_client_thread, (void*)thread_data) != 0) {
                 perror("Failed to create client thread");
                 exit(EXIT_FAILURE);
             }
@@ -149,14 +197,19 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-void* multi_client_thread(){
-    char* mode = (char*)arg;
+void* multi_client_thread(void* arg) {
+    ThreadArgs* thread_data = (ThreadArgs*)arg;
+    ConfigCliente* client_config = thread_data->client_config;
+    char* mode = thread_data->mode;
     struct sockaddr_in server_addr;
+    int thread_socket;
 
-    // Create a socket
-    if ((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+    // Create a socket for this thread
+    if ((thread_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("Failed to create socket");
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to create socket.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to create socket.");
+        pthread_mutex_unlock(&log_mutex);
         pthread_exit(NULL);
     }
 
@@ -164,72 +217,90 @@ void* multi_client_thread(){
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(PORT);
-    if (inet_pton(AF_INET, config.server_ip, &server_addr.sin_addr) <= 0) {
+    if (inet_pton(AF_INET, client_config->server_ip, &server_addr.sin_addr) <= 0) {
         perror("Invalid address/ Address not supported");
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Invalid address/ Address not supported.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Invalid address/ Address not supported.");
+        pthread_mutex_unlock(&log_mutex);
         pthread_exit(NULL);
     }
 
     // Connect to the server
-    if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+    if (connect(thread_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
         perror("Failed to connect to server");
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to connect to server.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to connect to server.");
+        pthread_mutex_unlock(&log_mutex);
         pthread_exit(NULL);
     }
     printf("Connected to the server.\n");
-    log_event(config.log_file, config.id_cliente, CODE_NEW_CLIENT, "Connected to the server.");
+    pthread_mutex_lock(&log_mutex);
+    log_event(client_config->log_file, client_config->id_cliente, CODE_NEW_CLIENT, "Connected to the server.");
+    pthread_mutex_unlock(&log_mutex);
 
     // Send the initial message to the server
     char buffer[BUFFER_SIZE];
-    snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_NEW_CLIENT);
-    if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+    snprintf(buffer, BUFFER_SIZE, "%d %d", client_config->id_cliente, CODE_NEW_CLIENT);
+    if (send(thread_socket, buffer, strlen(buffer), 0) == -1) {
         perror("Failed to send initial message to server");
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send initial message to server.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to send initial message to server.");
+        pthread_mutex_unlock(&log_mutex);
         pthread_exit(NULL);
     }
+    memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after sending
 
     if (strcmp(mode, "singleplayer") == 0) {
-        request_new_game();
+        request_new_game(client_config, thread_socket);
     } else if (strcmp(mode, "multiplayer") == 0) {
-        multiplayerpvp();
+        multiplayerpvp(client_config, thread_socket);
     } else {
         printf("Invalid mode.\n");
         pthread_exit(NULL);
     }
 
+    close(thread_socket); // Close the socket when done
     pthread_exit(NULL);
 }
 
-void request_new_game() {
+void request_new_game(ConfigCliente* client_config, int thread_socket) {
     char buffer[BUFFER_SIZE];
-    snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_REQUEST_NEW_GAME);
-    if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+    snprintf(buffer, BUFFER_SIZE, "%d %d", client_config->id_cliente, CODE_REQUEST_NEW_GAME);
+    if (send(thread_socket, buffer, strlen(buffer), 0) == -1) {
         perror("Failed to send new game request to server");
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send new game request to server.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to send new game request to server.");
+        pthread_mutex_unlock(&log_mutex);
     } else {
         printf("New game request sent to the server.\n");
-        log_event(config.log_file, config.id_cliente, CODE_REQUEST_NEW_GAME, "New game request sent to the server.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_REQUEST_NEW_GAME, "New game request sent to the server.");
+        pthread_mutex_unlock(&log_mutex);
         GameData* game_data = malloc(sizeof(GameData));
         if (game_data == NULL) {
             perror("Failed to allocate memory for game data");
             return;
         }
-        *game_data = receive_new_game();
+        *game_data = receive_new_game(client_config, thread_socket);
         if (game_data->id_jogo != 0) {
-                pthread_create(&solver_thread, NULL, solve_game_in_increments, game_data);
-                pthread_detach(&solver_thread); // Detach the thread to avoid resource leaks
+            game_data->client_config = client_config; // Set the client configuration
+            pthread_create(&solver_thread, NULL, solve_game_in_increments, game_data);
+            pthread_detach(&solver_thread); // Detach the thread to avoid resource leaks
         } else {
             free(game_data);
         }
     }
+    memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after sending
 }
 
-GameData receive_new_game(){
+GameData receive_new_game(ConfigCliente* client_config, int thread_socket) {
     char buffer[BUFFER_SIZE];
-    ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+    ssize_t bytes_received = recv(thread_socket, buffer, BUFFER_SIZE - 1, 0);
     if (bytes_received == -1) {
         perror("Failed to receive new game from server");
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game from server.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game from server.");
+        pthread_mutex_unlock(&log_mutex);
         return (GameData){0};
     }
 
@@ -244,35 +315,44 @@ GameData receive_new_game(){
 
     if (response_code == CODE_RESPONSE_NEW_GAME) {
         printf("New game received from the server.\n");
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_NEW_GAME, "New game received from the server.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_NEW_GAME, "New game received from the server.");
+        pthread_mutex_unlock(&log_mutex);
         GameData game_data;
         game_data.id_jogo = game_id;
         memcpy(game_data.tabuleiro, tabuleiro, 81);
         current_game_id = game_id; // Update the global variable
-        memset(buffer, 0, BUFFER_SIZE);
+        memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after processing
         return game_data;
     } else {
         printf("Failed to receive new game. Server response code: %d\n", response_code);
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game. Invalid response code.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game. Invalid response code.");
+        pthread_mutex_unlock(&log_mutex);
     }
-    memset(buffer, 0, BUFFER_SIZE);
+    memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after processing
     return (GameData){0};
 }
 
-void multiplayerpvp() {
+void multiplayerpvp(ConfigCliente* client_config, int thread_socket) {
     char buffer[BUFFER_SIZE];
     int client_id, response_code, game_id;
     char tabuleiro[81];
-    snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_REQUEST_COMPETITION_JOIN);
-    if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
+    snprintf(buffer, BUFFER_SIZE, "%d %d", client_config->id_cliente, CODE_REQUEST_COMPETITION_JOIN);
+    if (send(thread_socket, buffer, strlen(buffer), 0) == -1) {
         perror("Failed to send new game request to server");
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send new game request to server.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to send new game request to server.");
+        pthread_mutex_unlock(&log_mutex);
     }
+    memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after sending
 
-    ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+    ssize_t bytes_received = recv(thread_socket, buffer, BUFFER_SIZE - 1, 0);
     if (bytes_received == -1) {
         perror("Failed to receive new game from server");
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game from server.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game from server.");
+        pthread_mutex_unlock(&log_mutex);
         return;
     }
 
@@ -280,43 +360,60 @@ void multiplayerpvp() {
 
     if(response_code == CODE_NOTIFY_COMPETITION_JOIN) {
         printf("You have joined the competition.\n");
-        log_event(config.log_file, config.id_cliente, CODE_NOTIFY_COMPETITION_JOIN, "You have joined the competition.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_NOTIFY_COMPETITION_JOIN, "You have joined the competition.");
+        pthread_mutex_unlock(&log_mutex);
     } else {
         printf("Failed to join the competition or room is full. Server response code: %d\n", response_code);
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to join the competition. Invalid response code.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to join the competition. Invalid response code.");
+        pthread_mutex_unlock(&log_mutex);
         return;
     }
+    memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after processing
 
-    ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
-    if (bytes_received == -1) {
+    ssize_t bytes_receivedd = recv(thread_socket, buffer, BUFFER_SIZE - 1, 0);
+    if (bytes_receivedd == -1) {
         perror("Failed to receive new game from server");
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game from server.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game from server.");
+        pthread_mutex_unlock(&log_mutex);
         return;
     }
 
     sscanf(buffer, "%d %d %d %s", &client_id, &response_code, &game_id, tabuleiro);
-    if(response_code = CODE_NOTIFY_COMPETITION_START){
+    if(response_code == CODE_NOTIFY_COMPETITION_START){
         printf("Competition has started.\n");
-        log_event(config.log_file, config.id_cliente, CODE_NOTIFY_COMPETITION_START, "Competition has started.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_NOTIFY_COMPETITION_START, "Competition has started.");
+        pthread_mutex_unlock(&log_mutex);
 
-        GameData game_data;
-        game_data.id_jogo = game_id;
-        memcpy(game_data.tabuleiro, tabuleiro, 81);
+        GameData* game_data = malloc(sizeof(GameData));
+        if (game_data == NULL) {
+            perror("Failed to allocate memory for game data");
+            return;
+        }
+        game_data->id_jogo = game_id;
+        memcpy(game_data->tabuleiro, tabuleiro, 81);
         current_game_id = game_id; // Update the global variable
 
         pthread_create(&solver_thread, NULL, solve_game_in_increments, game_data);
-        pthread_detach(&solver_thread); // Detach the thread to avoid resource leaks
+        pthread_detach(&solver_thread); // Detach the thread to avoid  resource leaks
 
     } else {
         printf("Failed to start the competition. Server response code: %d\n", response_code);
-        log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to start the competition. Invalid response code.");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to start the competition. Invalid response code.");
+        pthread_mutex_unlock(&log_mutex);
         return;
     }
+    memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after processing
 }
 
 void* solve_game_in_increments(void* arg) {
     GameData* game_data = (GameData*)arg;
-    char buffer[BUFFER_SIZE], positions[config.partial_num], n_in_positions[config.partial_num];
+    ConfigCliente* client_config = game_data->client_config; // Get the client configuration
+    char buffer[BUFFER_SIZE], positions[client_config->partial_num], n_in_positions[client_config->partial_num];
     int attempts = 0;
     int filled_positions = 0;
 
@@ -341,7 +438,7 @@ void* solve_game_in_increments(void* arg) {
         int positions_filled_this_round = 0;
 
         // Fill n spaces incrementally
-        for (int i = 0; i < 81 && positions_filled_this_round < config.partial_num; i++) {
+        for (int i = 0; i < 81 && positions_filled_this_round < client_config->partial_num; i++) {
             if (game_data->tabuleiro[i] == '0') {
                 for (int j = 0; j < 9; j++) {
                     if (!attempted_numbers[i][j] && preencherPosicao(game_data->tabuleiro, i, number_array[j])) {
@@ -350,7 +447,9 @@ void* solve_game_in_increments(void* arg) {
                         positions_filled_this_round++;
                         char message[100]; // Allocate enough space for the message
                         snprintf(message, sizeof(message), "Filled position %d with number %c.", i, number_array[j]);
-                        log_event(config.log_file, config.id_cliente, CODE_FILL_POSITION, message);
+                        pthread_mutex_lock(&log_mutex);
+                        log_event(client_config->log_file, client_config->id_cliente, CODE_FILL_POSITION, message);
+                        pthread_mutex_unlock(&log_mutex);
                         sleep(1); // Sleep for a second to simulate solving time
                         break;
                     }
@@ -364,17 +463,20 @@ void* solve_game_in_increments(void* arg) {
 
         if (filled_positions == 81) {
             // Send the full solution to the server
-            snprintf(buffer, BUFFER_SIZE, "%d %d %d %d %.2f %81s", config.id_cliente, CODE_SEND_FINAL_SOLUTION, game_data->id_jogo, attempts, elapsed_time, game_data->tabuleiro);
+            snprintf(buffer, BUFFER_SIZE, "%d %d %d %d %.2f %81s", client_config->id_cliente, CODE_SEND_FINAL_SOLUTION, game_data->id_jogo, attempts, elapsed_time, game_data->tabuleiro);
             display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
             if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
                 perror("Failed to send full solution to server");
-                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send full solution to server.");
+                pthread_mutex_lock(&log_mutex);
+                log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to send full solution to server.");
+                pthread_mutex_unlock(&log_mutex);
                 return NULL;
             }
+            printf(buffer);
             memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after sending
         } else {
             // Send the partial solution to the server
-            snprintf(buffer, BUFFER_SIZE, "%d %d %d %d", config.id_cliente, CODE_SEND_PARTIAL_SOLUTION, game_data->id_jogo, positions_filled_this_round);
+            snprintf(buffer, BUFFER_SIZE, "%d %d %d %d", client_config->id_cliente, CODE_SEND_PARTIAL_SOLUTION, game_data->id_jogo, positions_filled_this_round);
             for (int i = 0; i < positions_filled_this_round; i++) {
                 char pos_str[4], num_str[4];
                 snprintf(pos_str, sizeof(pos_str), " %d", positions[i]);
@@ -388,9 +490,12 @@ void* solve_game_in_increments(void* arg) {
             printf("\n");
             if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
                 perror("Failed to send partial solution to server");
-                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to send partial solution to server.");
+                pthread_mutex_lock(&log_mutex);
+                log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to send partial solution to server.");
+                pthread_mutex_unlock(&log_mutex);
                 return NULL;
             }
+            printf(buffer);
             memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after sending
         }
 
@@ -398,7 +503,9 @@ void* solve_game_in_increments(void* arg) {
         ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
         if (bytes_received == -1) {
             perror("Failed to receive solution verification from server");
-            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive solution verification from server.");
+            pthread_mutex_lock(&log_mutex);
+            log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to receive solution verification from server.");
+            pthread_mutex_unlock(&log_mutex);
             return NULL;
         }
         buffer[bytes_received] = '\0';
@@ -409,7 +516,9 @@ void* solve_game_in_increments(void* arg) {
         if (response_code == CODE_RESPONSE_CORRECT_PARTIAL) {
             printf("Partial solution is correct.\n");
             display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
-            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_CORRECT_PARTIAL, "Partial solution is correct.");
+            pthread_mutex_lock(&log_mutex);
+            log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_CORRECT_PARTIAL, "Partial solution is correct.");
+            pthread_mutex_unlock(&log_mutex);
         } else if (response_code == CODE_RESPONSE_INCORRECT_PARTIAL) {
             int errors = 0;
             sscanf(buffer, "%d %d %d", &client_id, &response_code, &errors);
@@ -440,11 +549,15 @@ void* solve_game_in_increments(void* arg) {
             }
             printf("Partial solution is incorrect. Contained %d errors.\n", errors);
             display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
-            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_INCORRECT_PARTIAL, "Partial solution is incorrect.");
+            pthread_mutex_lock(&log_mutex);
+            log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_INCORRECT_PARTIAL, "Partial solution is incorrect.");
+            pthread_mutex_unlock(&log_mutex);
             filled_positions -= errors; // Rollback the filled positions
         } else if (response_code == CODE_RESPONSE_CORRECT_FINAL) {
             printf("Final solution is correct!\n");
-            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_CORRECT_FINAL, "Final solution is correct.");
+            pthread_mutex_lock(&log_mutex);
+            log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_CORRECT_FINAL, "Final solution is correct.");
+            pthread_mutex_unlock(&log_mutex);
             display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
             memset(buffer, 0, BUFFER_SIZE);
 
@@ -452,7 +565,9 @@ void* solve_game_in_increments(void* arg) {
             bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
             if (bytes_received == -1) {
                 perror("Failed to receive record status from server");
-                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive record status from server.");
+                pthread_mutex_lock(&log_mutex);
+                log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to receive record status from server.");
+                pthread_mutex_unlock(&log_mutex);
                 return NULL;
             }
             buffer[bytes_received] = '\0';
@@ -461,70 +576,45 @@ void* solve_game_in_increments(void* arg) {
 
             if (record_code == CODE_NEW_RECORD) {
                 printf("New record achieved!\n");
-                log_event(config.log_file, config.id_cliente, CODE_NEW_RECORD, "New record achieved.");
+                pthread_mutex_lock(&log_mutex);
+                log_event(client_config->log_file, client_config->id_cliente, CODE_NEW_RECORD, "New record achieved.");
+                pthread_mutex_unlock(&log_mutex);
             } else if (record_code == CODE_NOT_RECORD) {
                 printf("Solution is correct but not a new record. Sorry!\n");
-                log_event(config.log_file, config.id_cliente, CODE_NOT_RECORD, "Solution is correct but not a new record.");
+                pthread_mutex_lock(&log_mutex);
+                log_event(client_config->log_file, client_config->id_cliente, CODE_NOT_RECORD, "Solution is correct but not a new record.");
+                pthread_mutex_unlock(&log_mutex);
             } else {
                 printf("Failed to receive valid record status. Server response code: %d\n", record_code);
-                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive valid record status. Invalid response code.");
+                pthread_mutex_lock(&log_mutex);
+                log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to receive valid record status. Invalid response code.");
+                pthread_mutex_unlock(&log_mutex);
                 return NULL;
             }
             memset(buffer, 0, BUFFER_SIZE);
-            display_menu();
-            break;
-        } else if (response_code == CODE_RESPONSE_INCORRECT_FINAL) {
-            int errors;
-            sscanf(buffer, "%d %d %d %d %s", &client_id, &response_code, &game_data->id_jogo, &errors, game_data->tabuleiro);
-            printf("Final solution is incorrect. Contained %d errors. Retrying...\n", errors);
-            display_game_status(game_data->tabuleiro, game_data->id_jogo, elapsed_time, start_time);
-            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_INCORRECT_FINAL, "Final solution is incorrect. Retrying...");
-            filled_positions -= errors; // Rollback the filled positions
-            memset(buffer, 0, BUFFER_SIZE);
-        } else if (response_code == CODE_NOTIFY_COMPETITION_END) {
-            int winner_id;
-            sscanf(buffer, "%d %d %d", &client_id, &response_code, &winner_id);
-            printf("PVP Competition winner is client %d. Stopping the game.\n", winner_id);
-            log_event(config.log_file, config.id_cliente, CODE_NOTIFY_COMPETITION_END, "Competition winner announced. Stopping the game.");
         } else if (response_code == CODE_NOTIFY_COMPETITION_WINNER) {
-            int winner_id;
-            sscanf(buffer, "%d %d %d", &client_id, &response_code, &winner_id);
-            printf("You won the PVP competition!\n", winner_id);
-            log_event(config.log_file, config.id_cliente, CODE_NOTIFY_COMPETITION_WINNER, "Won the competition! Stopping the game.");
-
-            memset(buffer, 0, BUFFER_SIZE);
-
-            // Wait for record status message from server
-            bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
-            if (bytes_received == -1) {
-                perror("Failed to receive record status from server");
-                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive record status from server.");
-                return NULL;
-            }
-            buffer[bytes_received] = '\0';
-            int record_code;
-            sscanf(buffer, "%d %d", &client_id, &record_code);
-
-            if (record_code == CODE_NEW_RECORD) {
-                printf("New record achieved!\n");
-                log_event(config.log_file, config.id_cliente, CODE_NEW_RECORD, "New record achieved.");
-            } else if (record_code == CODE_NOT_RECORD) {
-                printf("Solution is correct but not a new record. Sorry!\n");
-                log_event(config.log_file, config.id_cliente, CODE_NOT_RECORD, "Solution is correct but not a new record.");
-            } else {
-                printf("Failed to receive valid record status. Server response code: %d\n", record_code);
-                log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive valid record status. Invalid response code.");
-                return NULL;
-            }
-            memset(buffer, 0, BUFFER_SIZE);
-
+            printf("Competition winner has been announced!\n");
+            pthread_mutex_lock(&log_mutex);
+            log_event(client_config->log_file, client_config->id_cliente, CODE_NOTIFY_COMPETITION_WINNER, "Client has won and competition will end.");
+            pthread_mutex_unlock(&log_mutex);
+            break;
+        } else if (response_code == CODE_NOTIFY_COMPETITION_END) {
+            printf("Competition has ended.\n");
+            pthread_mutex_lock(&log_mutex);
+            log_event(client_config->log_file, client_config->id_cliente, CODE_NOTIFY_COMPETITION_END, "Competition has ended.");
+            pthread_mutex_unlock(&log_mutex);
+            break;
         } else {
             printf("Failed to receive solution verification. Server response code: %d\n", response_code);
-            log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive solution verification. Invalid response code.");
+            pthread_mutex_lock(&log_mutex);
+            log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to receive solution verification. Invalid response code.");
+            pthread_mutex_unlock(&log_mutex);
             return NULL;
         }
 
-    } while (response_code != CODE_RESPONSE_CORRECT_FINAL || response_code != CODE_NOTIFY_COMPETITION_WINNER || response_code != CODE_NOTIFY_COMPETITION_END);  
+        printf(buffer);
+
+    } while (response_code != CODE_RESPONSE_CORRECT_FINAL && response_code != CODE_NOTIFY_COMPETITION_WINNER && response_code != CODE_NOTIFY_COMPETITION_END);  
     memset(buffer, 0, BUFFER_SIZE);
     return NULL;
 }
@@ -542,7 +632,7 @@ void display_game_status(char* tabuleiro, int id_jogo, double elapsed, time_t st
 
 }//quando ele manda pro server e recebe do server, mostrar display
 
-void request_game_statistics() {
+/*void request_game_statistics() {
      if (current_game_id == -1) {
         printf("No game is currently being played.\n");
         return;
@@ -584,21 +674,21 @@ void receive_game_statistics() {
         printf("Failed to receive game statistics. Server response code: %d\n", response_code);
         log_event(config.log_file, config.id_cliente, CODE_RESPONSE_ERROR, "Failed to receive game statistics. Invalid response code.");
     }
-}
+}*/
 
-void request_client_statistics() {
+/*void request_client_statistics() {
     printf("\n======== Sudoku Client Statistics =========\n");
     printf("Solved Games: %d\n", config.games_solved);
     printf("Errors: %d\n", config.errors_sent);
     printf("=============================================\n");
-}
+}*/
 
 void display_menu() {
     printf("\n========== Sudoku Client Interface ==========\n");
     printf("1: Request New Game (Singleplayer)\n");
     printf("2: Multiplayer\n"); //Mudou!
-    printf("3: Request Current Game Statistics\n");
-    printf("4: View Client Statistics\n");
+    //printf("3: Request Current Game Statistics\n");
+    //printf("4: View Client Statistics\n");
     printf("0: Disconnect\n");
     printf("=============================================\n");
     printf("Enter command number: ");
