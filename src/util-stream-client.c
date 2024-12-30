@@ -28,8 +28,8 @@ void lerConfiguracaoCliente(const char* ficheiroConfig, ConfigCliente* config) {
     fscanf(fp, "PATH_LOGS: %s\n", config->log_file);
     fscanf(fp, "IS_VIP: %d\n", &config->is_vip);
     fscanf(fp, "PARTIAL_NUM: %d\n", &config->partial_num);
-    fscanf(fp, "GAMES_SOLVED: %d\n", &config->games_solved);
-    fscanf(fp, "ERRORS_SENT: %d\n", &config->errors_sent);
+    //fscanf(fp, "GAMES_SOLVED: %d\n", &config->games_solved);
+    //fscanf(fp, "ERRORS_SENT: %d\n", &config->errors_sent);
     fclose(fp);
 
     // Print a configuração carregada para verificar

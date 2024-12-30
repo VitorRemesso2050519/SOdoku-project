@@ -40,7 +40,7 @@ void* client_thread(void* arg) {
     ssize_t bytes_received;
 
     while (1) {
-        printf(is_competing ? "Is a competitor.\n" : "Is not a competitor.\n");
+        //printf(is_competing ? "Is a competitor.\n" : "Is not a competitor.\n");
         bool partial_correct = true;
         // Receive message
         bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);

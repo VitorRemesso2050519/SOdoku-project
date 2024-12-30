@@ -169,6 +169,8 @@ int main(int argc, char* argv[]) {
             client_config->is_vip = rand() % 2; // Randomize between 0 and 1
             client_config->partial_num = rand() % 81 + 1; // Randomize between 1 and 81
 
+            printf("Client %d created. Configs: IP=%s, LOG=%s, PARTIAL_NUM=%d, IS_VIP=%d\n", client_config->id_cliente, client_config->server_ip, client_config->log_file, client_config->partial_num, client_config->is_vip);
+
             // Create thread data
             ThreadArgs* thread_data = malloc(sizeof(ThreadArgs));
             if (thread_data == NULL) {
@@ -359,12 +361,12 @@ void multiplayerpvp(ConfigCliente* client_config, int thread_socket) {
     sscanf(buffer, "%d %d", &client_id, &response_code);
 
     if(response_code == CODE_NOTIFY_COMPETITION_JOIN) {
-        printf("You have joined the competition.\n");
+        printf("%d - You have joined the competition.\n", client_id);
         pthread_mutex_lock(&log_mutex);
         log_event(client_config->log_file, client_config->id_cliente, CODE_NOTIFY_COMPETITION_JOIN, "You have joined the competition.");
         pthread_mutex_unlock(&log_mutex);
     } else {
-        printf("Failed to join the competition or room is full. Server response code: %d\n", response_code);
+        printf("%d - Failed to join the competition or room is full. Server response code: %d\n", client_id, response_code);
         pthread_mutex_lock(&log_mutex);
         log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to join the competition. Invalid response code.");
         pthread_mutex_unlock(&log_mutex);
