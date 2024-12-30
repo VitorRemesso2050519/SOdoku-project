@@ -295,7 +295,8 @@ void* client_thread(void* arg) {
                     barrier_wait(&room_barrier); // Normal clients wait at the barrier
                 }
                 
-                snprintf(buffer, BUFFER_SIZE, "%d %d %d %s", client_id, CODE_NOTIFY_COMPETITION_START, multiplayer_game.id_jogo, multiplayer_game.tabuleiro);
+                snprintf(buffer, BUFFER_SIZE, "%d %d %d %81s", client_id, CODE_NOTIFY_COMPETITION_START, multiplayer_game.id_jogo, multiplayer_game.tabuleiro);
+                printf("Sending competition game: %s\n", buffer);
                 if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
                     perror("Send competition game");
                 }
