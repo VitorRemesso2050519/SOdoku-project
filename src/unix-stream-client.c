@@ -15,6 +15,7 @@
 
 pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t display_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t message_mutex = PTHREAD_MUTEX_INITIALIZER;
 int client_socket;
 int current_game_id = -1;
 
@@ -26,23 +27,32 @@ typedef struct {
 
 typedef struct {
     ConfigCliente* client_config;
-    char* mode;
+    char mode[20];
 } ThreadArgs;
 
 void request_new_game(ConfigCliente* client_config, int thread_socket);
-//void request_game_statistics();
-//void request_client_statistics();
 GameData receive_new_game(ConfigCliente* client_config, int thread_socket);
-//void receive_game_statistics();
 void display_menu();
 void display_game_status(char* tabuleiro, int id_cliente, int id_jogo, double elapsed, time_t start_time);
 void multiplayerpvp(ConfigCliente* client_config, int thread_socket);
 void* multi_client_thread(void* arg);
 void* solve_game_in_increments(void* arg);
 
+//possibility of just using this function to send messages to the server, way more general but refactors the code
+void send_message(int socket, const char* message, ConfigCliente* client_config) {
+    pthread_mutex_lock(&message_mutex);
+    if (send(socket, message, strlen(message), 0) == -1) {
+        perror("Failed to send message to server");
+        pthread_mutex_lock(&log_mutex);
+        log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to send message to server.");
+        pthread_mutex_unlock(&log_mutex);
+    }
+    pthread_mutex_unlock(&message_mutex);
+}
+
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        printf("Uso: %s <ficheiro_configuracao> [num_clients] [singleplayer/multiplayer]\n", argv[0]);
+        printf("Uso: <ficheiro_configuracao> [num_clients] [singleplayer/multiplayer/incrementaltest]\n");
         return 1;
     }
 
@@ -144,17 +154,22 @@ int main(int argc, char* argv[]) {
             }
         }
     } else if (argc == 4) {
-        // Multi-client mode //WIP!!!
+        // Multi-client mode
         int num_clients = atoi(argv[2]);
         char* mode = argv[3];
-        pthread_t* threads = malloc(num_clients * sizeof(pthread_t));
         
-        if (mode == NULL || (strcmp(mode, "singleplayer") != 0 && strcmp(mode, "multiplayer") != 0)) {
+        if (mode == NULL || (strcmp(mode, "singleplayer") != 0 && strcmp(mode, "multiplayer") != 0 && strcmp(mode, "incrementaltest") != 0)) {
             printf("Invalid mode.\n");
             return 1;
         }
 
-        for (int i = 0; i < num_clients; i++) {
+        if (strcmp(mode, "incrementaltest") == 0) {
+            num_clients = 81; // Set the number of clients to 81 for incremental testing
+        }
+
+        pthread_t* threads = malloc(num_clients * sizeof(pthread_t));
+
+        for (int i = 1; i <= num_clients; i++) {
             //create config for each client
             //Requires a common log file for all clients
             ConfigCliente* client_config = malloc(sizeof(ConfigCliente));
@@ -163,11 +178,19 @@ int main(int argc, char* argv[]) {
                 exit(EXIT_FAILURE);
             }
 
-            client_config->id_cliente = i + 1;
-            strcpy(client_config->server_ip, "127.0.0.1");
-            strcpy(client_config->log_file, "logs/common.log");
-            client_config->is_vip = rand() % 2; // Randomize between 0 and 1
-            client_config->partial_num = rand() % 81 + 1; // Randomize between 1 and 81
+            if (strcmp(mode, "incrementaltest") == 0) {
+                client_config->id_cliente = i;
+                strcpy(client_config->server_ip, "127.0.0.1");
+                strcpy(client_config->log_file, "logs/common.log");
+                client_config->is_vip = 0; // Everyone is a normal client for incremental testing
+                client_config->partial_num = i; // Partial number is the client number
+            } else {
+                client_config->id_cliente = i;
+                strcpy(client_config->server_ip, "127.0.0.1");
+                strcpy(client_config->log_file, "logs/common.log");
+                client_config->is_vip = rand() % 2; // Randomize between 0 and 1
+                client_config->partial_num = rand() % 81 + 1; // Randomize between 1 and 81
+            }
 
             printf("Client %d created. Configs: IP=%s, LOG=%s, PARTIAL_NUM=%d, IS_VIP=%d\n", client_config->id_cliente, client_config->server_ip, client_config->log_file, client_config->partial_num, client_config->is_vip);
 
@@ -178,7 +201,7 @@ int main(int argc, char* argv[]) {
                 exit(EXIT_FAILURE);
             }
             thread_data->client_config = client_config;
-            thread_data->mode = mode;
+            strcpy(thread_data->mode, mode);
 
             if (pthread_create(&threads[i], NULL, multi_client_thread, (void*)thread_data) != 0) {
                 perror("Failed to create client thread");
@@ -191,6 +214,7 @@ int main(int argc, char* argv[]) {
         }
 
         free(threads);
+
     } else {
         printf("Invalid number of arguments.\n");
         return 1;
@@ -243,18 +267,19 @@ void* multi_client_thread(void* arg) {
     // Send the initial message to the server
     char buffer[BUFFER_SIZE];
     snprintf(buffer, BUFFER_SIZE, "%d %d", client_config->id_cliente, CODE_NEW_CLIENT);
-    if (send(thread_socket, buffer, strlen(buffer), 0) == -1) {
+    /*if (send(thread_socket, buffer, strlen(buffer), 0) == -1) {
         perror("Failed to send initial message to server");
         pthread_mutex_lock(&log_mutex);
         log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to send initial message to server.");
         pthread_mutex_unlock(&log_mutex);
         pthread_exit(NULL);
-    }
+    }*/
+    send_message(thread_socket, buffer, client_config);
     memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after sending
 
     if (strcmp(mode, "singleplayer") == 0) {
         request_new_game(client_config, thread_socket);
-    } else if (strcmp(mode, "multiplayer") == 0) {
+    } else if (strcmp(mode, "multiplayer") == 0 || strcmp(mode, "incrementaltest") == 0) {
         multiplayerpvp(client_config, thread_socket);
     } else {
         printf("Invalid mode.\n");
