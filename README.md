@@ -7,6 +7,10 @@ Projeto de SO de sudoku.
 3. Numa das janelas, escreva "./server config/server.config". Isto irá inicializar o Servidor.
 4. COM O SERVIDOR A CORRER, na outra janela escreva "./client config/client.config". Isto irá inicializar o Cliente.
 - Poderá correr outros ficheiros configs, mas use o mesmo formato disponível a seguir.
+5. Se quiser criar vários clientes ao mesmo tempo, pode especifique quantos e o modo de jogo que irão jogar.
+- Para tal, escreva ./client config/client.config [n] [modo]
+- n sendo o número de clientes e modo sendo o modo de jogo (singleplayer, multiplayer, incrementaltest).
+- incrementaltest é um caso multiplayer especial para podermos ver qual tipo de incrementação é o mais rápido.
 
 ## Formatos dos config files:
 
