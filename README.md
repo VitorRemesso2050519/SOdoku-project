@@ -1,16 +1,20 @@
 # SOdoku-project
 Projeto de SO de sudoku.
 
+## Breve esclarecimento de arquitetura:
+- config contém os ficheiros de configuração de servidor e dos vários clientes
+- data contém os ficheiros de dados do servidor, como os jogos e os recordes
+- logs contém os ficheiros de logs dos clientes, do servidor e um ficheiro comum para clientes
+- src contém o código
+
 ## Para correr este projeto:
-1. Após ter feito o download e posto no seu terminal preferido (PuTTY por exemplo), corra o makefile disponível.
-2. Com duas janelas abertas diferentes. Uma será para o Servidor e outra para o Cliente.
-3. Numa das janelas, escreva "./server config/server.config". Isto irá inicializar o Servidor.
-4. COM O SERVIDOR A CORRER, na outra janela escreva "./client config/client.config". Isto irá inicializar o Cliente.
-- Poderá correr outros ficheiros configs, mas use o mesmo formato disponível a seguir.
-5. Se quiser criar vários clientes ao mesmo tempo, pode especifique quantos e o modo de jogo que irão jogar.
-- Para tal, escreva ./client config/client.config [n] [modo]
-- n sendo o número de clientes e modo sendo o modo de jogo (singleplayer, multiplayer, incrementaltest).
-- incrementaltest é um caso multiplayer especial para podermos ver qual tipo de incrementação é o mais rápido.
+1. Após ter feito o download para o seu terminal preferido (PuTTY por exemplo), corra o makefile disponível com o comando "make".
+2. Aquando a finalização da compilação, abra um terminal extra.
+3. Na raiz do projeto terá dois executáveis: client e server. Um terminal será para o Servidor e outro para o Cliente.
+4. Num dos terminais, escreva "./server config/server.config". Isto irá inicializar o Servidor.
+5. COM O SERVIDOR A CORRER, no outro terminal escreva o seguinte: ./client config/[ficheiro] [n] [modo]
+- ficheiro sendo a configuração de cliente que escolheu, n sendo o número de clientes e modo sendo o modo de jogo (singleplayer, multiplayer, incrementaltest).
+- singleplayer gera múltiplos clientes para jogar um jogo qualquer singleplayer, multiplayer gera múltiplos clientes para entrar na sala multiplayer e jogarem tal jogo multiplayer e incrementaltest é um caso multiplayer especial para podermos ver qual tipo de incrementação é o mais rápido.
 
 ## Formatos dos config files:
 
@@ -26,5 +30,5 @@ Projeto de SO de sudoku.
 - IP_SERVIDOR: (127.0.0.1)
 - PATH_LOGS: (logs/client.log)
 - IS_VIP: (bool (0 ou 1))
-- PARTIAL_NUM: (int, entre 0 e 81)
+- PARTIAL_NUM: (int, entre 1 e 81)
 
