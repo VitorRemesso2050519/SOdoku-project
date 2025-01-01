@@ -29,12 +29,13 @@ typedef struct {
     double record_time;    // Record time for the game
 } JogoState;
 
+// Barrier structure
 typedef struct {
-    sem_t mutex;
-    sem_t turnstile1;
-    sem_t turnstile2;
-    int count;
-    int num_threads;
+    sem_t mutex;           // Mutex semaphore
+    sem_t turnstile1;      // Turnstile 1 semaphore
+    sem_t turnstile2;      // Turnstile 2 semaphore
+    int count;             // Counter
+    int num_threads;       // Number of threads
 } Barrier;
 
 // Function to read server configuration from a file

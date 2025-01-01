@@ -24,22 +24,24 @@ typedef struct {
     char solucao[81];    // Solução correspondente
 } Jogo;
 
+// Game state structure
 typedef struct {
-    int id_jogo;
-    int client_id;
+    int client_id;         // Client identifier
+    int id_jogo;           // Game identifier
     int attempts;          // Solution attempts
-    double record_time;       // Record time for the game
+    double record_time;    // Record time for the game
 } JogoState;
 
+// Barrier structure
 typedef struct {
-    sem_t mutex;
-    sem_t turnstile1;
-    sem_t turnstile2;
-    int count;
-    int num_threads;
+    sem_t mutex;           // Mutex semaphore
+    sem_t turnstile1;      // Turnstile 1 semaphore
+    sem_t turnstile2;      // Turnstile 2 semaphore
+    int count;             // Counter
+    int num_threads;       // Number of threads
 } Barrier;
 
-// Função para ler o ficheiro de configuração do servidor
+// Function to read server configuration from a file
 void lerConfiguracaoServidor(const char* ficheiroConfig, ConfigServidor* config) {
     FILE* fp = fopen(ficheiroConfig, "r");
     if (fp == NULL) {
@@ -58,8 +60,7 @@ void lerConfiguracaoServidor(const char* ficheiroConfig, ConfigServidor* config)
     printf("Configuração carregada: PATH_JOGOS = %s, LOG_FILE = %s, PATH_STATS=%s, MAX_CLIENTS = %d, ROOM_SIZE = %d\n", config->path_jogos, config->log_file, config->path_stats, config->max_clients, config->room_size);
 }
 
-// Função para carregar os jogos a partir de um ficheiro
-// Função para carregar os jogos a partir de um ficheiro
+// Function to load games from a file
 void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int *num_jogos) {
     FILE* fp = fopen(ficheiroJogos, "r");
     if (fp == NULL) {
@@ -76,7 +77,7 @@ void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int *num_jogos) {
     char solucao[81];
     *num_jogos = 0;
 
-    // Ler os jogos e as soluções do ficheiro
+    // Read games from the file
     while (fscanf(fp, "%d , %s , %s\n", &id, tabuleiro, solucao) != EOF) {
         jogos[*num_jogos].id_jogo = id;
         strcpy(jogos[*num_jogos].tabuleiro, tabuleiro);
@@ -163,6 +164,7 @@ bool escreverEstatisticasJogo(const char* ficheiroEstatisticas, int client_id, i
     return false; // Game ID not found
 }
 
+// Function to verify if a specific position is correct
 bool verificarPosicao(char num, int pos, char solucao_correta[81]) {
     printf("Verifying position: pos=%d, num=%c, expected=%c\n", pos, num, solucao_correta[pos]);
     if (num == solucao_correta[pos]) {
@@ -172,6 +174,7 @@ bool verificarPosicao(char num, int pos, char solucao_correta[81]) {
     }
 }
 
+// Function to verify if a game is completely correct
 int verificarJogoCompleto(char tabuleiro[81], char solucao_correta[81]) {
     int erro = 0;
     for (int i = 0; i < 81; i++) {
@@ -182,11 +185,13 @@ int verificarJogoCompleto(char tabuleiro[81], char solucao_correta[81]) {
         return erro;
 }
 
+// Function to randomly select a game
 Jogo grabRandomGame(Jogo jogos[], int num_jogos){
     int random_index = rand() % num_jogos;
     return jogos[random_index];
 }
 
+// Function to initialize a barrier
 void barrier_init(Barrier* barrier, int num_threads) {
     sem_init(&barrier->mutex, 0, 1);
     sem_init(&barrier->turnstile1, 0, 0);
@@ -195,6 +200,7 @@ void barrier_init(Barrier* barrier, int num_threads) {
     barrier->num_threads = num_threads;
 }
 
+// Function to wait on a barrier
 void barrier_wait(Barrier* barrier) {
     sem_wait(&barrier->mutex);
     barrier->count++;
@@ -218,54 +224,3 @@ void barrier_wait(Barrier* barrier) {
     sem_wait(&barrier->turnstile2);
     sem_post(&barrier->turnstile2);
 }
-
-/*int main(int argc, char* argv[]) {
-    // Verificar se o ficheiro de configuração foi passado como argumento
-    if (argc < 2) {
-        printf("Uso: %s <ficheiro_configuracao>\n", argv[0]);
-        return 1;
-    }
-
-    //coisas pro socket
-    //temos que verificar o que o client quer fazer
-
-    // Inicializar a configuração e os jogos
-    ConfigServidor config;
-    Jogo jogos[100];   // Suporte para até 100 jogos por simplicidade
-    int num_jogos = 0;
-
-    // Ler a configuração do servidor
-    lerConfiguracaoServidor(argv[1], &config);
-
-    // Carregar os jogos a partir do ficheiro de jogos especificado na configuração
-    carregarJogos(config.path_jogos, jogos, &num_jogos);
-
-    // Placeholder para a lógica do servidor - gestão de clientes, etc.
-    printf("Servidor pronto para aceitar conexões...\n");
-
-    // Exemplo de como logar um evento de jogo
-    log_event(config.log_file, "- Servidor iniciado e pronto para aceitar conexões.");
-
-    // Simular uma interação do cliente (no futuro será a partir da rede)
-    int id_jogo = 1;  // Vamos pegar no primeiro jogo para o teste
-    char solucao_cliente[81] = "534678912672195348198342567859761423426853791713924856961537284287419635345286179";  // Exemplo de solução enviada pelo cliente
-    
-    printf("\nCliente [id] recebeu o Jogo ID: %d\n", id_jogo);
-    imprimirGrelha(jogos[id_jogo-1].tabuleiro);
-
-    printf("\nCliente [id] enviou a solução para o Jogo ID: %d\n", id_jogo);
-    log_event(config.log_file, "- Cliente [id] enviou solução.");
-
-    // Verificar a solução
-    if (verificarSolucao(solucao_cliente, jogos[id_jogo-1].solucao) == 0) {
-        printf("\nSolução correta!\n");
-        imprimirGrelha(solucao_cliente);
-        log_event(config.log_file, "- Solução do cliente [id] correta.");
-    } else {
-        printf("\nSolução incorreta!\n");
-        imprimirGrelha(solucao_cliente);
-        log_event(config.log_file, "- Solução do cliente [id] incorreta.");
-    }
-
-    return 0;
-}*/

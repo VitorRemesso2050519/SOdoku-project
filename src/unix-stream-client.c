@@ -8,7 +8,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <pthread.h>
-#include <time.h> // Add this include for time functions
+#include <time.h>
 
 #define BUFFER_SIZE 1024
 #define PORT 8080
@@ -19,7 +19,7 @@ int current_game_id = -1;
 
 typedef struct {
     int id_jogo;
-    char tabuleiro[81]; // 81 characters
+    char tabuleiro[81];
     ConfigCliente* client_config;
 } GameData;
 
@@ -104,7 +104,7 @@ int main(int argc, char* argv[]) {
             pthread_mutex_unlock(&log_mutex);
             exit(EXIT_FAILURE);
         }
-        memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after sending
+        memset(buffer, 0, BUFFER_SIZE);
 
         // Main loop to handle user commands
         int command;
@@ -120,9 +120,6 @@ int main(int argc, char* argv[]) {
                     break;
                 case 3:
                     //request_game_statistics(); // sends request to server asking for info on the game client is currently playing
-                    break;
-                case 4:
-                    //request_client_statistics(); // grabs info from the config file and shows it to the user
                     break;
                 case 0:
                     snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_DISCONNECT);
@@ -154,7 +151,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (strcmp(mode, "incrementaltest") == 0) {
-            num_clients = 81; // Set the number of clients to 81 for incremental testing
+            num_clients = 81; // Set the number of clients to 81 for incremental testing, no matter what number num_clients was
         }
 
         printf("Creating %d clients in %s mode.\n", num_clients, mode);
@@ -162,7 +159,7 @@ int main(int argc, char* argv[]) {
         pthread_t threads[num_clients];
 
         for (int i = 0; i < num_clients; i++) {
-            //create config for each client
+            //Create config for each client
             //Requires a common log file for all clients
             ConfigCliente* client_config = malloc(sizeof(ConfigCliente));
             if (client_config == NULL) {
@@ -265,11 +262,10 @@ void* multi_client_thread(void* arg) {
         pthread_mutex_unlock(&log_mutex);
         pthread_exit(NULL);
     }
-    memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after sending
+    memset(buffer, 0, BUFFER_SIZE);
 
     printf("%d - Initial message sent to the server.\n", client_config->id_cliente);
 
-    // Ensure only one request is sent
     if (strcmp(mode, "singleplayer") == 0) {
         printf("%d - Requesting new game in singleplayer mode.\n", client_config->id_cliente);
         request_new_game(client_config, thread_socket);
@@ -304,16 +300,13 @@ void request_new_game(ConfigCliente* client_config, int thread_socket) {
         }
         *game_data = receive_new_game(client_config, thread_socket);
         if (game_data->id_jogo != 0) {
-            game_data->client_config = client_config; // Set the client configuration
+            game_data->client_config = client_config;
             solve_game_in_increments(game_data, thread_socket);
-            /*pthread_t solver_thread;
-            pthread_create(&solver_thread, NULL, solve_game_in_increments, game_data);
-            pthread_detach(&solver_thread); // Detach the thread to avoid resource leaks*/
         } else {
             free(game_data);
         }
     }
-    memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after sending
+    memset(buffer, 0, BUFFER_SIZE);
 }
 
 GameData receive_new_game(ConfigCliente* client_config, int thread_socket) {
@@ -333,7 +326,6 @@ GameData receive_new_game(ConfigCliente* client_config, int thread_socket) {
     int response_code = 0, client_id = 0, game_id = 0;
     char tabuleiro[81];
 
-    // Use sscanf to parse the integers and the tabuleiro separately
     sscanf(buffer, "%d %d %d %81s", &client_id, &response_code, &game_id, tabuleiro);
 
     if (response_code == CODE_RESPONSE_NEW_GAME) {
@@ -344,8 +336,8 @@ GameData receive_new_game(ConfigCliente* client_config, int thread_socket) {
         GameData game_data;
         game_data.id_jogo = game_id;
         memcpy(game_data.tabuleiro, tabuleiro, 81);
-        current_game_id = game_id; // Update the global variable
-        memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after processing
+        //current_game_id = game_id; // Update the global variable
+        memset(buffer, 0, BUFFER_SIZE);
         return game_data;
     } else {
         printf("Failed to receive new game. Server response code: %d\n", response_code);
@@ -353,7 +345,7 @@ GameData receive_new_game(ConfigCliente* client_config, int thread_socket) {
         log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to receive new game. Invalid response code.");
         pthread_mutex_unlock(&log_mutex);
     }
-    memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after processing
+    memset(buffer, 0, BUFFER_SIZE);
     return (GameData){0};
 }
 
@@ -369,7 +361,7 @@ void multiplayerpvp(ConfigCliente* client_config, int thread_socket) {
         pthread_mutex_unlock(&log_mutex);
         return;
     }
-    memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after sending
+    memset(buffer, 0, BUFFER_SIZE);
 
     ssize_t bytes_received = recv(thread_socket, buffer, BUFFER_SIZE - 1, 0);
     if (bytes_received == -1) {
@@ -394,7 +386,7 @@ void multiplayerpvp(ConfigCliente* client_config, int thread_socket) {
         pthread_mutex_unlock(&log_mutex);
         return;
     }
-    memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after processing
+    memset(buffer, 0, BUFFER_SIZE);
 
     bytes_received = recv(thread_socket, buffer, BUFFER_SIZE - 1, 0);
     if (bytes_received == -1) {
@@ -419,12 +411,9 @@ void multiplayerpvp(ConfigCliente* client_config, int thread_socket) {
         }
         game_data->id_jogo = game_id;
         memcpy(game_data->tabuleiro, tabuleiro, 81);
-        game_data->client_config = client_config; // Set the client configuration
-        current_game_id = game_id; // Update the global variable
+        game_data->client_config = client_config;
+        current_game_id = game_id;
         solve_game_in_increments(game_data, thread_socket);
-        /*pthread_t solver_thread;
-        pthread_create(&solver_thread, NULL, solve_game_in_increments, game_data);
-        pthread_detach(&solver_thread); // Detach the thread to avoid resource leaks*/
 
     } else {
         printf("Failed to start the competition. Server response code: %d\n", response_code);
@@ -433,11 +422,11 @@ void multiplayerpvp(ConfigCliente* client_config, int thread_socket) {
         pthread_mutex_unlock(&log_mutex);
         return;
     }
-    memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after processing
+    memset(buffer, 0, BUFFER_SIZE);
 }
 
 void solve_game_in_increments(GameData* game_data, int client_socket) {
-    ConfigCliente* client_config = game_data->client_config; // Get the client configuration
+    ConfigCliente* client_config = game_data->client_config;
     char buffer[BUFFER_SIZE], positions[client_config->partial_num], n_in_positions[client_config->partial_num];
     int attempts = 0;
     int filled_positions = 0;
@@ -497,7 +486,7 @@ void solve_game_in_increments(GameData* game_data, int client_socket) {
                 pthread_mutex_unlock(&log_mutex);
                 return;
             }
-            memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after sending
+            memset(buffer, 0, BUFFER_SIZE);
         } else {
             // Send the partial solution to the server
             snprintf(buffer, BUFFER_SIZE, "%d %d %d %d", client_config->id_cliente, CODE_SEND_PARTIAL_SOLUTION, game_data->id_jogo, positions_filled_this_round);
@@ -516,7 +505,7 @@ void solve_game_in_increments(GameData* game_data, int client_socket) {
                 pthread_mutex_unlock(&log_mutex);
                 return;
             }
-            memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after sending
+            memset(buffer, 0, BUFFER_SIZE);
         }
 
         // Wait for server response
@@ -690,19 +679,11 @@ void receive_game_statistics() {
     }
 }*/
 
-/*void request_client_statistics() {
-    printf("\n======== Sudoku Client Statistics =========\n");
-    printf("Solved Games: %d\n", config.games_solved);
-    printf("Errors: %d\n", config.errors_sent);
-    printf("=============================================\n");
-}*/
-
 void display_menu() {
     printf("\n========== Sudoku Client Interface ==========\n");
     printf("1: Request New Game (Singleplayer)\n");
     printf("2: Multiplayer\n"); //Mudou!
     //printf("3: Request Current Game Statistics\n");
-    //printf("4: View Client Statistics\n");
     printf("0: Disconnect\n");
     printf("=============================================\n");
     printf("Enter command number: ");

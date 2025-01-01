@@ -7,9 +7,9 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <time.h>      // For strptime
-#include <semaphore.h> // For sem_init, sem_post
-#include <pthread.h>   // For pthread_create, pthread_detach
+#include <time.h>
+#include <semaphore.h>
+#include <pthread.h>
 
 #define BUFFER_SIZE 1024
 
@@ -50,7 +50,7 @@ void* client_thread(void* arg) {
             sem_post(&client_semaphore);
             return NULL;
         }
-        buffer[bytes_received] = '\0'; // Ensure null-termination
+        buffer[bytes_received] = '\0';
         printf("Received message: %s\n", buffer); // Debug print
 
         // Parse the first two variables in the message
@@ -334,7 +334,7 @@ int main(int argc, char* argv[]) {
     int server_socket, client_socket;
     struct sockaddr_in server_addr, client_addr;
     socklen_t addr_len = sizeof(client_addr);
-    int client_id; // Declare client_id here
+    int client_id;
 
     if (argc < 2) {
         printf("Uso: %s <ficheiro_configuracao>\n", argv[0]);
@@ -344,10 +344,10 @@ int main(int argc, char* argv[]) {
     // Seed the random number generator
     srand(time(NULL));
 
-    // Ler a configuração do servidor
+    // Read server configurations from the specified file
     lerConfiguracaoServidor(argv[1], &config);
 
-    // Carregar os jogos a partir do ficheiro de jogos especificado na configuração
+    // Load games from the specified file
     carregarJogos(config.path_jogos, jogos, &num_jogos);
 
     for (int i = 0; i < num_jogos; i++) {
@@ -382,7 +382,7 @@ int main(int argc, char* argv[]) {
     sem_init(&client_semaphore, 0, config.max_clients);
     barrier_init(&room_barrier, config.room_size);
 
-    // Inicializar o mutex para os logs
+    // Inicialize the mutex for logs
     if (pthread_mutex_init(&log_mutex, NULL) != 0) {
         perror("Failed to initialize log mutex");
         return 1;
@@ -442,5 +442,3 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-
-// sincronização nos logs (pode haver diferentes clientes a fazer pedidos ao mesmo tempo, o que o server tem que registar)

@@ -4,35 +4,31 @@
 #include <time.h>
 #include <stdbool.h>
 
-// Estrutura de configuração do cliente
+// Client configuration structure
 typedef struct {
-    int id_cliente;        // Identificador do cliente
-    char server_ip[16];    // IP do servidor
-    char log_file[256];    // Caminho para o ficheiro de logs
-    bool is_vip; // Flag para indicar se é VIP
-    int partial_num; // Número de posições a preencher
-    int games_solved;
-    int errors_sent;
+    int id_cliente;        // Client identifier
+    char server_ip[16];    // Server IP address
+    char log_file[256];    // Path to log file
+    bool is_vip;           // Flag to see if client is VIP
+    int partial_num;       // Number of positions to fill before sending partial solution
 } ConfigCliente;
 
-// Função para ler o ficheiro de configuração do cliente
+// Function to read client configuration from a file
 void lerConfiguracaoCliente(const char* ficheiroConfig, ConfigCliente* config) {
     FILE* fp = fopen(ficheiroConfig, "r");
     if (fp == NULL) {
         printf("Erro ao abrir o ficheiro de configuração!\n");
         exit(1);
     }
-    // Ler a configuração
+    // Read configuration from file
     fscanf(fp, "ID_CLIENTE: %d\n", &config->id_cliente);
     fscanf(fp, "IP_SERVIDOR: %s\n", config->server_ip);
     fscanf(fp, "PATH_LOGS: %s\n", config->log_file);
     fscanf(fp, "IS_VIP: %d\n", &config->is_vip);
     fscanf(fp, "PARTIAL_NUM: %d\n", &config->partial_num);
-    //fscanf(fp, "GAMES_SOLVED: %d\n", &config->games_solved);
-    //fscanf(fp, "ERRORS_SENT: %d\n", &config->errors_sent);
     fclose(fp);
 
-    // Print a configuração carregada para verificar
+    // Print the loaded configuration for verification
     printf("Configuração carregada: ID_CLIENTE = %d, SERVER_IP = %s, LOG_FILE = %s\n", 
            config->id_cliente, config->server_ip, config->log_file);
     printf("PARTIAL_NUM = %d, IS_VIP = %d\n", 
@@ -65,7 +61,7 @@ bool ehValido(const char tabuleiro[81], int pos, char num) {
     return true;
 }
 
-// Função auxiliar: tenta preencher uma posição com um número válido
+// Function to fill a position with a valid number
 bool preencherPosicao(char* tabuleiro, int pos, char num) {
     if (tabuleiro[pos] != '0') {
         return false;
@@ -77,6 +73,7 @@ bool preencherPosicao(char* tabuleiro, int pos, char num) {
     return false;
 }
 
+// Function to shuffle an array of characters
 void shuffle(char *array, int n) {
     for (int i = n - 1; i > 0; i--) {
         int j = rand() % (i + 1);
@@ -85,28 +82,3 @@ void shuffle(char *array, int n) {
         array[j] = temp;
     }
 }
-
-
-/*int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        printf("Uso: %s <ficheiro_configuracao>\n", argv[0]);
-        return 1;
-    }
-
-    // Inicializar a configuração do cliente
-    ConfigCliente config;
-    lerConfiguracaoCliente(argv[1], &config);
-    log_event(config.log_file," - Configuração do cliente [id] carregada.");
-
-    // Exemplo de solução correta e solução enviada pelo cliente (esta fase não envolve comunicação real)
-    char solucao_correta[81] = "534678912672195348198342567859761423426853791713924856961537284287419635345286179";  // Solução correta
-    char solucao_incompleta[81] = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";  // Solução incompleta
-
-    // Simular uma tentativa de resolução
-    simularTentativa(solucao_incompleta, solucao_correta, config.log_file, config);
-
-    // Verificar a solução do cliente
-    log_event(config.log_file," - Verificando solução do cliente [id].");
-
-    return 0;
-}*/
