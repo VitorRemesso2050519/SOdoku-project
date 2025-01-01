@@ -4,7 +4,7 @@ Projeto de SO de sudoku.
 ## Breve esclarecimento de arquitetura:
 - config contém os ficheiros de configuração de servidor e dos vários clientes
 - data contém os ficheiros de dados do servidor, como os jogos e os recordes
-- logs contém os ficheiros de logs dos clientes, do servidor e um ficheiro comum para clientes
+- logs contém os ficheiros de logs dos clientes, do servidor e um ficheiro log comum para a simulação de vários clientes
 - src contém o código
 
 ## Para correr este projeto:
