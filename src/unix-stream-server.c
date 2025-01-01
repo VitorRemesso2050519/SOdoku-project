@@ -373,7 +373,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Listen for incoming connections
-    if (listen(server_socket, 5) == -1) {
+    if (listen(server_socket, 100) == -1) {
         perror("Failed to listen on socket");
         exit(EXIT_FAILURE);
     }
@@ -419,17 +419,9 @@ int main(int argc, char* argv[]) {
 
         // Create a thread to handle the client
         pthread_t thread_id;
-        int* new_sock = malloc(sizeof(int));
-        if (new_sock == NULL) {
-            perror("Failed to allocate memory for new socket");
-            close(client_socket);
-            sem_post(&client_semaphore);
-            continue;
-        }
-        *new_sock = client_socket;
-        if (pthread_create(&thread_id, NULL, client_thread, (void*)new_sock) != 0) {
+        if (pthread_create(&thread_id, NULL, client_thread, (void*)client_data) != 0) {
             perror("Failed to create thread");
-            free(new_sock);
+            free(client_data);
             close(client_socket);
             sem_post(&client_semaphore);
             continue;
