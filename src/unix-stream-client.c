@@ -15,7 +15,6 @@
 
 pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t display_mutex = PTHREAD_MUTEX_INITIALIZER;
-int client_socket;
 int current_game_id = -1;
 
 typedef struct {
@@ -35,7 +34,7 @@ void display_menu();
 void display_game_status(char* tabuleiro, int id_cliente, int id_jogo, double elapsed, time_t start_time);
 void multiplayerpvp(ConfigCliente* client_config, int thread_socket);
 void* multi_client_thread(void* arg);
-void solve_game_in_increments(GameData* game_data);
+void solve_game_in_increments(GameData* game_data, int client_socket);
 
 int main(int argc, char* argv[]) {
 
@@ -59,6 +58,7 @@ int main(int argc, char* argv[]) {
         // Original single client mode
         struct sockaddr_in server_addr;
         pthread_t solver_thread;
+        int client_socket;
 
         // Create a socket
         if ((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
@@ -200,7 +200,6 @@ int main(int argc, char* argv[]) {
                 exit(EXIT_FAILURE);
             }
 
-            sleep(3);
         }
 
         for (int i = 0; i < num_clients; i++) {
@@ -306,7 +305,7 @@ void request_new_game(ConfigCliente* client_config, int thread_socket) {
         *game_data = receive_new_game(client_config, thread_socket);
         if (game_data->id_jogo != 0) {
             game_data->client_config = client_config; // Set the client configuration
-            solve_game_in_increments(game_data);
+            solve_game_in_increments(game_data, thread_socket);
             /*pthread_t solver_thread;
             pthread_create(&solver_thread, NULL, solve_game_in_increments, game_data);
             pthread_detach(&solver_thread); // Detach the thread to avoid resource leaks*/
@@ -422,7 +421,7 @@ void multiplayerpvp(ConfigCliente* client_config, int thread_socket) {
         memcpy(game_data->tabuleiro, tabuleiro, 81);
         game_data->client_config = client_config; // Set the client configuration
         current_game_id = game_id; // Update the global variable
-        solve_game_in_increments(game_data);
+        solve_game_in_increments(game_data, thread_socket);
         /*pthread_t solver_thread;
         pthread_create(&solver_thread, NULL, solve_game_in_increments, game_data);
         pthread_detach(&solver_thread); // Detach the thread to avoid resource leaks*/
@@ -437,7 +436,7 @@ void multiplayerpvp(ConfigCliente* client_config, int thread_socket) {
     memset(buffer, 0, BUFFER_SIZE); // Clear the buffer after processing
 }
 
-void solve_game_in_increments(GameData* game_data) {
+void solve_game_in_increments(GameData* game_data, int client_socket) {
     ConfigCliente* client_config = game_data->client_config; // Get the client configuration
     char buffer[BUFFER_SIZE], positions[client_config->partial_num], n_in_positions[client_config->partial_num];
     int attempts = 0;
@@ -606,16 +605,19 @@ void solve_game_in_increments(GameData* game_data) {
             }
             memset(buffer, 0, BUFFER_SIZE);
         } else if (response_code == CODE_NOTIFY_COMPETITION_WINNER) {
+            printf("%d - You have won the competition. Congratulations!\n", client_config->id_cliente);
             pthread_mutex_lock(&log_mutex);
             log_event(client_config->log_file, client_config->id_cliente, CODE_NOTIFY_COMPETITION_WINNER, "Client has won and competition will end.");
             pthread_mutex_unlock(&log_mutex);
             break;
         } else if (response_code == CODE_NOTIFY_COMPETITION_END) {
+            printf("%d - Competition has ended. You lost!\n", client_config->id_cliente);
             pthread_mutex_lock(&log_mutex);
             log_event(client_config->log_file, client_config->id_cliente, CODE_NOTIFY_COMPETITION_END, "Competition has ended.");
             pthread_mutex_unlock(&log_mutex);
             break;
         } else {
+            printf("%d - Failed to receive solution verification. Server response code: %d\n", client_config->id_cliente, response_code);
             pthread_mutex_lock(&log_mutex);
             log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to receive solution verification. Invalid response code.");
             pthread_mutex_unlock(&log_mutex);
