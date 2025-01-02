@@ -282,6 +282,8 @@ void* multi_client_thread(void* arg) {
     }
     memset(buffer, 0, BUFFER_SIZE);
 
+    sleep(1); // Sleep for a second to avoid message overlap
+
     printf("%d - Initial message sent to the server.\n", client_config->id_cliente);
 
     // Handle the client mode
@@ -622,13 +624,17 @@ void solve_game_in_increments(GameData* game_data, int client_socket) {
         } else if (response_code == CODE_NOTIFY_COMPETITION_WINNER) {
             printf("%d - You have won the competition. Congratulations!\n", client_config->id_cliente);
             pthread_mutex_lock(&log_mutex);
-            log_event(client_config->log_file, client_config->id_cliente, CODE_NOTIFY_COMPETITION_WINNER, "Client has won and competition will end.");
+            char message[100]; // Allocate enough space for the message
+            snprintf(message, sizeof(message), "Client has WON! Elapsed time: %.2f seconds. Attempts: %d", elapsed_time, attempts);
+            log_event(client_config->log_file, client_config->id_cliente, CODE_NOTIFY_COMPETITION_WINNER, message);
             pthread_mutex_unlock(&log_mutex);
             break;
         } else if (response_code == CODE_NOTIFY_COMPETITION_END) {
             printf("%d - Competition has ended. You lost!\n", client_config->id_cliente);
             pthread_mutex_lock(&log_mutex);
-            log_event(client_config->log_file, client_config->id_cliente, CODE_NOTIFY_COMPETITION_END, "Competition has ended.");
+            char message[100]; // Allocate enough space for the message
+            snprintf(message, sizeof(message), "Client has lost. Elapsed time: %.2f seconds. Attempts: %d", elapsed_time, attempts);
+            log_event(client_config->log_file, client_config->id_cliente, CODE_NOTIFY_COMPETITION_END, message);
             pthread_mutex_unlock(&log_mutex);
             break;
         } else {

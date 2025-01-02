@@ -171,17 +171,20 @@ void* client_thread(void* arg) {
                     
                     // Check if the competition has already ended
                     pthread_mutex_lock(&competition_mutex);
-                    if (competition_winner) {
+                    if (is_competing && competition_winner) {
                         // Notify the client that someone else has already won
                         snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_NOTIFY_COMPETITION_END);
                         send(client_socket, buffer, strlen(buffer), 0);
                         pthread_mutex_unlock(&competition_mutex);
                         break;
-                    } else {
+                    } else if (is_competing && !competition_winner) {
                         competition_winner = true;
+                        snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_NOTIFY_COMPETITION_WINNER);
+                        send(client_socket, buffer, strlen(buffer), 0);
                         pthread_mutex_unlock(&competition_mutex);
+                        break;
                     }
-
+                    
                     // Notify the client that the final solution is correct
                     snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_RESPONSE_CORRECT_FINAL);
                     send(client_socket, buffer, strlen(buffer), 0);
