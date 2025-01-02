@@ -35,6 +35,7 @@ void* client_thread(void* arg) {
     ssize_t bytes_received;
 
     while (1) {
+        // This was just a message to test if someone was a competitor or not, leaving it here just in case.
         //printf(is_competing ? "Is a competitor.\n" : "Is not a competitor.\n");
         bool partial_correct = true;
         // Receive message
@@ -55,6 +56,7 @@ void* client_thread(void* arg) {
         // Process the message based on the message code
         switch (message_code) {
             case CODE_NEW_CLIENT:
+                // Handle new client connection
                 printf("Client %d connected.\n", client_id);
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_NEW_CLIENT, "Client connected.");
@@ -83,6 +85,7 @@ void* client_thread(void* arg) {
                 break;
             }
             case CODE_SEND_PARTIAL_SOLUTION:
+                // Handle partial solution submission
                 sscanf(buffer, "%d %d %d %d", &client_id, &message_code, &game_id, &n_posicoes);
                 printf("Parsed values: client_id=%d, message_code=%d, game_id=%d, n_posicoes=%d\n", client_id, message_code, game_id, n_posicoes);
 
@@ -95,6 +98,7 @@ void* client_thread(void* arg) {
                     break;
                 }
 
+                // Extract the game solution and the positions and numbers from the buffer
                 game = jogos[game_id-1];
                 printf("Game solution: %s\n", game.solucao); // Debug print
 
@@ -128,6 +132,7 @@ void* client_thread(void* arg) {
                         errors++;
                     }
                 }
+                // Prepare a response based on the partial solution check
                 if (partial_correct) {
                     snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_RESPONSE_CORRECT_PARTIAL, 0);
                     pthread_mutex_lock(&log_mutex);
@@ -163,7 +168,8 @@ void* client_thread(void* arg) {
 
                 // Prepare a response based on the solution check
                 if (errors == 0) {
-
+                    
+                    // Check if the competition has already ended
                     pthread_mutex_lock(&competition_mutex);
                     if (competition_winner) {
                         // Notify the client that someone else has already won
@@ -176,6 +182,7 @@ void* client_thread(void* arg) {
                         pthread_mutex_unlock(&competition_mutex);
                     }
 
+                    // Notify the client that the final solution is correct
                     snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_RESPONSE_CORRECT_FINAL);
                     send(client_socket, buffer, strlen(buffer), 0);
                     pthread_mutex_lock(&log_mutex);
@@ -205,17 +212,22 @@ void* client_thread(void* arg) {
                             printf("jogoState before writing: id_jogo=%d, client_id=%d, attempts=%d, record_time=%.2f\n", jogoState.id_jogo, jogoState.client_id, jogoState.attempts, jogoState.record_time); // Debug print
                             if (escreverEstatisticasJogo(config.path_stats, jogoState.client_id, jogoState.id_jogo, jogoState.attempts, jogoState.record_time)) {
                                 printf("After writing: id_jogo=%d, client_id=%d, attempts=%d, record_time=%.2f\n", jogoState.id_jogo, jogoState.client_id, jogoState.attempts, jogoState.record_time); // Debug print
+                                // Notify the client that the record update was successful
                                 pthread_mutex_lock(&log_mutex);
                                 log_event(config.log_file, client_id, CODE_NEW_RECORD, "Game statistics updated successfully. New record!");
                                 snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_NEW_RECORD);
                                 send(client_socket, buffer, strlen(buffer), 0);
                                 pthread_mutex_unlock(&log_mutex);
                             } else {
+                                // Notify the client that the record update failed
                                 pthread_mutex_lock(&log_mutex);
                                 log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Failed to update game statistics.");
                                 pthread_mutex_unlock(&log_mutex);
+                                snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_RESPONSE_ERROR);
+                                send(client_socket, buffer, strlen(buffer), 0);
                             }
                         } else {
+                            // Notify the client that the new statistics are not better than the existing ones
                             pthread_mutex_lock(&log_mutex);
                             log_event(config.log_file, client_id, CODE_NOT_RECORD, "New statistics are not better than existing ones.");
                             pthread_mutex_unlock(&log_mutex);
@@ -227,6 +239,7 @@ void* client_thread(void* arg) {
                     }
                     pthread_mutex_unlock(&record_mutex);
                 } else {
+                    // Notify the client that the final solution is incorrect
                     snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_RESPONSE_INCORRECT_FINAL, errors);
                     char log_message[BUFFER_SIZE];
                     snprintf(log_message, BUFFER_SIZE, "Final client solution had %d errors.", errors);
@@ -241,7 +254,7 @@ void* client_thread(void* arg) {
                 break;
             }
             case CODE_REQUEST_STATS: {
-                // Handle game state request
+                // Handle game state request, not being used in the current implementation
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_REQUEST_STATS, "Client requested game statistics.");
                 pthread_mutex_unlock(&log_mutex);
@@ -283,24 +296,25 @@ void* client_thread(void* arg) {
                 is_competing = true; // Set to true when the client joins a competition
 
                 if (is_vip) {
+                    printf("%d - VIP client is waiting at the barrier.\n", client_id);
                     sem_post(&vip_semaphore); // Signal that a VIP client is waiting
                     barrier_wait(&room_barrier); // VIP clients wait at the barrier
                 } else {
+                    printf("%d - Normal client is waiting at the barrier.\n", client_id);
                     sem_post(&normal_semaphore); // Signal that a normal client is waiting
                     // Wait for all VIP clients to pass
                     while (sem_trywait(&vip_semaphore) == 0) {
-                    // Do nothing, just wait for VIP clients to pass
+                        // Just wait for VIP clients to pass
+                        printf("%d - Normal client is waiting for VIP clients to pass.\n", client_id);
                     }
                     barrier_wait(&room_barrier); // Normal clients wait at the barrier
                 }
                 
                 snprintf(buffer, BUFFER_SIZE, "%d %d %d %81s", client_id, CODE_NOTIFY_COMPETITION_START, multiplayer_game.id_jogo, multiplayer_game.tabuleiro);
-                printf("Sending competition game: %s\n", buffer);
+                printf("%d - Sending competition game: %s\n", client_id, buffer);
                 if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
                     perror("Send competition game");
                 }
-
-                //is_competing = true; // Set to true when the client joins a competition
 
                 break;
             case CODE_DISCONNECT:
@@ -317,6 +331,7 @@ void* client_thread(void* arg) {
                 close(client_socket);
                 return NULL;
             default:
+                // Handle unknown message codes
                 printf("Unknown message code %d from client %d.\n", message_code, client_id);
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Unknown message code.");

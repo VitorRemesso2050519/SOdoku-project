@@ -115,15 +115,18 @@ int main(int argc, char* argv[]) {
             scanf("%d", &command);
             switch (command) {
                 case 1:
+                    // Request a new game
                     request_new_game(&config, client_socket);
                     break;
                 case 2:
+                    // Join a multiplayer game
                     multiplayerpvp(&config, client_socket);
                     break;
-                case 3:
-                    //request_game_statistics(); // sends request to server asking for info on the game client is currently playing
-                    break;
+                /*case 3:
+                    request_game_statistics(); // sends request to server asking for info on the game client is currently playing, not working as intended
+                    break;*/
                 case 0:
+                    // Disconnect from the server
                     snprintf(buffer, BUFFER_SIZE, "%d %d", config.id_cliente, CODE_DISCONNECT);
                     if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
                         perror("Failed to send disconnect request to server");
@@ -138,6 +141,7 @@ int main(int argc, char* argv[]) {
                     pthread_mutex_unlock(&log_mutex);
                     return 0;
                 default:
+                    // Invalid command, self explanatory!
                     printf("Invalid command.\n");
                     break;
             }
@@ -147,21 +151,24 @@ int main(int argc, char* argv[]) {
         int num_clients = atoi(argv[2]);
         char* mode = argv[3];
         
+        // Validate the mode
         if (mode == NULL || (strcmp(mode, "singleplayer") != 0 && strcmp(mode, "multiplayer") != 0 && strcmp(mode, "incrementaltest") != 0)) {
             printf("Invalid mode.\n");
             return 1;
         }
 
+        // Validate the number of clients
         if (num_clients < 2) {
             printf("Number of clients must be at least 2.\n");
             return 1;
         }
 
+        // Override the number of clients for incremental testing (must be 81)
         if (strcmp(mode, "incrementaltest") == 0) {
-            num_clients = 81; // Set the number of clients to 81 for incremental testing, no matter what number num_clients was
+            num_clients = 81;
         }
 
-        printf("Creating %d clients in %s mode.\n", num_clients, mode);
+        printf("Creating %d clients in %s mode.\n", num_clients, mode); //Debug print
 
         pthread_t threads[num_clients];
 
@@ -174,6 +181,7 @@ int main(int argc, char* argv[]) {
                 exit(EXIT_FAILURE);
             }
 
+            // Set the client configuration generation based on the mode
             if (strcmp(mode, "incrementaltest") == 0) {
                 client_config->id_cliente = i + 1;
                 strcpy(client_config->server_ip, "127.0.0.1");
@@ -190,7 +198,7 @@ int main(int argc, char* argv[]) {
 
             printf("Client %d created. Configs: IP=%s, LOG=%s, PARTIAL_NUM=%d, IS_VIP=%d\n", client_config->id_cliente, client_config->server_ip, client_config->log_file, client_config->partial_num, client_config->is_vip);
 
-            // Create thread data
+            // Create thread data for each simulated client
             ThreadArgs* thread_data = malloc(sizeof(ThreadArgs));
             if (thread_data == NULL) {
                 perror("Failed to allocate memory for thread data");
@@ -199,6 +207,7 @@ int main(int argc, char* argv[]) {
             thread_data->client_config = client_config;
             strcpy(thread_data->mode, mode);
 
+            // Create a thread for each simulated client
             if (pthread_create(&threads[i], NULL, multi_client_thread, (void*)thread_data) != 0) {
                 perror("Failed to create client thread");
                 exit(EXIT_FAILURE);
@@ -206,6 +215,7 @@ int main(int argc, char* argv[]) {
 
         }
 
+        // Wait for all threads to finish
         for (int i = 0; i < num_clients; i++) {
             pthread_join(threads[i], NULL);
         }
@@ -218,6 +228,7 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
+// Thread function for multi-client mode
 void* multi_client_thread(void* arg) {
     ThreadArgs* thread_data = (ThreadArgs*)arg;
     ConfigCliente* client_config = thread_data->client_config;
@@ -273,6 +284,7 @@ void* multi_client_thread(void* arg) {
 
     printf("%d - Initial message sent to the server.\n", client_config->id_cliente);
 
+    // Handle the client mode
     if (strcmp(mode, "singleplayer") == 0) {
         printf("%d - Requesting new game in singleplayer mode.\n", client_config->id_cliente);
         request_new_game(client_config, thread_socket);
@@ -287,15 +299,18 @@ void* multi_client_thread(void* arg) {
     pthread_exit(NULL);
 }
 
+// Function that requests a new game from the server, used mainly for singleplayer mode
 void request_new_game(ConfigCliente* client_config, int thread_socket) {
     char buffer[BUFFER_SIZE];
     snprintf(buffer, BUFFER_SIZE, "%d %d", client_config->id_cliente, CODE_REQUEST_NEW_GAME);
     if (send(thread_socket, buffer, strlen(buffer), 0) == -1) {
+        // Request failed
         perror("Failed to send new game request to server");
         pthread_mutex_lock(&log_mutex);
         log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_ERROR, "Failed to send new game request to server.");
         pthread_mutex_unlock(&log_mutex);
     } else {
+        // Request sent successfully
         printf("%d - New game request sent to the server.\n", client_config->id_cliente);
         pthread_mutex_lock(&log_mutex);
         log_event(client_config->log_file, client_config->id_cliente, CODE_REQUEST_NEW_GAME, "New game request sent to the server.");
@@ -305,6 +320,7 @@ void request_new_game(ConfigCliente* client_config, int thread_socket) {
             perror("Failed to allocate memory for game data");
             return;
         }
+        // Receive the new game from the server
         *game_data = receive_new_game(client_config, thread_socket);
         if (game_data->id_jogo != 0) {
             game_data->client_config = client_config;
@@ -316,6 +332,7 @@ void request_new_game(ConfigCliente* client_config, int thread_socket) {
     memset(buffer, 0, BUFFER_SIZE);
 }
 
+// Function that receives a new game from the server, used by request_new_game
 GameData receive_new_game(ConfigCliente* client_config, int thread_socket) {
     char buffer[BUFFER_SIZE];
     ssize_t bytes_received = recv(thread_socket, buffer, BUFFER_SIZE - 1, 0);
@@ -343,7 +360,7 @@ GameData receive_new_game(ConfigCliente* client_config, int thread_socket) {
         GameData game_data;
         game_data.id_jogo = game_id;
         memcpy(game_data.tabuleiro, tabuleiro, 81);
-        //current_game_id = game_id; // Update the global variable
+        //current_game_id = game_id; // Update the global variable, not being used right now.
         memset(buffer, 0, BUFFER_SIZE);
         return game_data;
     } else {
@@ -356,6 +373,7 @@ GameData receive_new_game(ConfigCliente* client_config, int thread_socket) {
     return (GameData){0};
 }
 
+// Function for multiplayer mode
 void multiplayerpvp(ConfigCliente* client_config, int thread_socket) {
     char buffer[BUFFER_SIZE];
     int client_id, response_code, game_id;
@@ -432,6 +450,7 @@ void multiplayerpvp(ConfigCliente* client_config, int thread_socket) {
     memset(buffer, 0, BUFFER_SIZE);
 }
 
+// Function to solve the game in increments, used by both singleplayer and multiplayer modes
 void solve_game_in_increments(GameData* game_data, int client_socket) {
     ConfigCliente* client_config = game_data->client_config;
     char buffer[BUFFER_SIZE], positions[client_config->partial_num], n_in_positions[client_config->partial_num];
@@ -624,6 +643,7 @@ void solve_game_in_increments(GameData* game_data, int client_socket) {
     memset(buffer, 0, BUFFER_SIZE);
 }
 
+// Function to display the game status
 void display_game_status(char* tabuleiro, int id_cliente, int id_jogo, double elapsed, time_t start_time) {
 
     pthread_mutex_lock(&display_mutex);
@@ -686,11 +706,12 @@ void receive_game_statistics() {
     }
 }*/
 
+// Function to display the menu
 void display_menu() {
     printf("\n========== Sudoku Client Interface ==========\n");
     printf("1: Request New Game (Singleplayer)\n");
-    printf("2: Multiplayer\n"); //Mudou!
-    //printf("3: Request Current Game Statistics\n");
+    printf("2: Multiplayer\n");
+    //printf("3: Request Current Game Statistics\n"); // Not working currently!
     printf("0: Disconnect\n");
     printf("=============================================\n");
     printf("Enter command number: ");

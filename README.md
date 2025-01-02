@@ -17,13 +17,15 @@ Projeto de SO de sudoku.
 - OBRIGATORIAMENTE terá que escrever o primeiro argumento (ficheiro de configuração). Se quiser simular vários clientes, por favor especifique o número de clientes e o modo juntamente com o ficheiro de configuração na ordem acima.
 - singleplayer gera múltiplos clientes para jogar um jogo qualquer singleplayer, multiplayer gera múltiplos clientes para entrar na sala multiplayer e jogarem tal jogo multiplayer e incrementaltest é um caso multiplayer especial para podermos ver qual tipo de incrementação é o mais rápido.
 
+- NOTA: Se quiser testar incrementaltest, por favor certifique-se que a variavel ROOM_SIZE no ficheiro de configuração do servidor é 81.
+
 ## Formatos dos config files:
 
 ### Servidor
 - PATH_JOGOS: (data/jogos.txt)
 - PATH_LOGS: (logs/server.log)
 - PATH_STATS: (data/jogos_stats.txt)
-- MAX_CLIENTS: (int, de 0 para cima)
+- MAX_CLIENTS: (int, maior que 0)
 - ROOM_SIZE: (int, de preferência entre 0 e MAX_CLIENTS)
 
 ### Cliente
