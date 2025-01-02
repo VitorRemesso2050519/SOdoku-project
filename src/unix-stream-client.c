@@ -557,17 +557,18 @@ void solve_game_in_increments(GameData* game_data, int client_socket) {
         } else if (response_code == CODE_RESPONSE_INCORRECT_PARTIAL) {
             int errors = 0;
             sscanf(buffer, "%d %d %d", &client_id, &response_code, &errors);
-            int offset = 0;
+            
+            // Use strtok to parse the buffer
+            char* token = strtok(buffer, " ");
             for (int i = 0; i < 3; i++) {
-                while (buffer[offset] != ' ') offset++;
-                offset++;
+                token = strtok(NULL, " "); // Skip the first three values
             }
+
             for (int i = 0; i < errors; i++) {
-                int pos;
-                sscanf(buffer + offset, "%d", &pos);
+                int pos = atoi(token);
                 game_data->tabuleiro[pos] = '0';
-                while (buffer[offset] != ' ' && buffer[offset] != '\0') offset++;
-                offset++;
+                token = strtok(NULL, " ");
+                
                 for (int j = 0; j < positions_filled_this_round; j++) {
                     if (positions[j] == pos) {
                         for (int k = 0; k < 9; k++) {

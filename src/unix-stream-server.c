@@ -103,23 +103,19 @@ void* client_thread(void* arg) {
                 printf("Game solution: %s\n", game.solucao); // Debug print
 
                 // Use n_positions to read the positions and numbers from the buffer
-                int offset = 0;
+                char* token = strtok(buffer, " ");
                 for (int i = 0; i < 4; i++) {
-                    while (buffer[offset] != ' ') offset++;
-                    offset++;
+                    token = strtok(NULL, " "); // Skip the first four values
                 }
 
                 for (int i = 0; i < n_posicoes; i++) {
-                    int pos;
-                    int num;
-                    sscanf(buffer + offset, "%d %d", &pos, &num);
+                    int pos = atoi(token);
+                    token = strtok(NULL, " ");
+                    int num = atoi(token);
+                    token = strtok(NULL, " ");
                     posicoes[i] = pos;
                     numeros[i] = num + '0'; // Convert integer to character
                     printf("Parsed position and number: posicoes[%d]=%d, numeros[%d]=%c\n", i, posicoes[i], i, numeros[i]);
-                    while (buffer[offset] != ' ' && buffer[offset] != '\0') offset++;
-                    offset++;
-                    while (buffer[offset] != ' ' && buffer[offset] != '\0') offset++;
-                    offset++;
                 }
 
                 // Validate partial solution
