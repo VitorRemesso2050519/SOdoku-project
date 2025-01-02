@@ -18,14 +18,14 @@ pthread_mutex_t display_mutex = PTHREAD_MUTEX_INITIALIZER;
 int current_game_id = -1;
 
 typedef struct {
-    int id_jogo;
-    char tabuleiro[81];
-    ConfigCliente* client_config;
+    int id_jogo;                    // Game identifier
+    char tabuleiro[81];             // Board layout as a 9x9 grid in a single string
+    ConfigCliente* client_config;   // Client configuration
 } GameData;
 
 typedef struct {
-    ConfigCliente* client_config;
-    char mode[20];
+    ConfigCliente* client_config;   // Client configuration
+    char mode[20];                  // Mode of operation
 } ThreadArgs;
 
 void request_new_game(ConfigCliente* client_config, int thread_socket);
