@@ -150,6 +150,11 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
+        if (num_clients < 2) {
+            printf("Number of clients must be at least 2.\n");
+            return 1;
+        }
+
         if (strcmp(mode, "incrementaltest") == 0) {
             num_clients = 81; // Set the number of clients to 81 for incremental testing, no matter what number num_clients was
         }
