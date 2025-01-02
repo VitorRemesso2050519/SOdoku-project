@@ -17,12 +17,14 @@ pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t display_mutex = PTHREAD_MUTEX_INITIALIZER;
 int current_game_id = -1;
 
+// Game data structure
 typedef struct {
     int id_jogo;                    // Game identifier
     char tabuleiro[81];             // Board layout as a 9x9 grid in a single string
     ConfigCliente* client_config;   // Client configuration
 } GameData;
 
+// Thread arguments structure
 typedef struct {
     ConfigCliente* client_config;   // Client configuration
     char mode[20];                  // Mode of operation

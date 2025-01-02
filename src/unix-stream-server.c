@@ -24,9 +24,10 @@ int num_jogos = 0;
 int current_client_ammount = 0;
 bool competition_winner = false;
 
+// Client data structure
 typedef struct {
-    int client_socket;
-    bool is_competing;
+    int client_socket; // Client socket descriptor
+    bool is_competing; // Flag to indicate if the client is competing
 } ClientData;
 
 void* client_thread(void* arg) {

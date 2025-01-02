@@ -33,7 +33,6 @@
 #define CODE_NOTIFY_COMPETITION_START 133   // Server notifies the client when the game starts
 #define CODE_NOTIFY_COMPETITION_WINNER 138  // Server announces the winner of a multiplayer game, therefore ending competition
 #define CODE_NOTIFY_COMPETITION_END 139     // Server notifies the client that the competition has ended
-// Needs more codes probably
 
 // Error and Control Codes
 #define CODE_RESPONSE_INVALID_COMMAND 404   // Server notifies the client of an unrecognized or unsupported command
