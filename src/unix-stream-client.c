@@ -527,7 +527,7 @@ void solve_game_in_increments(GameData* game_data, int client_socket) {
         buffer[bytes_received] = '\0';
         int client_id;
         sscanf(buffer, "%d %d", &client_id, &response_code);
-
+        
         if (response_code == CODE_RESPONSE_CORRECT_PARTIAL) {
             display_game_status(game_data->tabuleiro, client_config->id_cliente, game_data->id_jogo, elapsed_time, start_time);
             pthread_mutex_lock(&log_mutex);

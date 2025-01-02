@@ -15,7 +15,7 @@
 
 ConfigServidor config;
 sem_t client_semaphore, vip_semaphore, normal_semaphore;
-pthread_mutex_t log_mutex, record_mutex, competition_mutex;
+pthread_mutex_t log_mutex, record_mutex, competition_mutex, player_count_update_mutex;
 Barrier room_barrier;
 
 Jogo jogos[100];
@@ -24,16 +24,10 @@ int num_jogos = 0;
 int current_client_ammount = 0;
 bool competition_winner = false;
 
-// Client data structure
-typedef struct {
-    int client_socket; // Client socket descriptor
-    bool is_competing; // Flag to indicate if the client is competing
-} ClientData;
-
 void* client_thread(void* arg) {
-    ClientData* client_data = (ClientData*)arg;
-    int client_socket = client_data->client_socket;
-    bool is_competing = false; // Initialize to false
+    int client_socket = *(int*)arg;
+    free(arg);
+    bool is_competing = false;
     int client_id, message_code, game_id, n_posicoes, errors, attempts, is_vip;
     char buffer[BUFFER_SIZE], tabuleiro[81], numeros[81], posicoes[81], error_positions[81];
     double record_time;
@@ -65,8 +59,10 @@ void* client_thread(void* arg) {
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_NEW_CLIENT, "Client connected.");
                 pthread_mutex_unlock(&log_mutex);
+                pthread_mutex_lock(&player_count_update_mutex);
                 current_client_ammount++;
                 printf("Current client ammount: %d\n", current_client_ammount);
+                pthread_mutex_unlock(&player_count_update_mutex);
                 memset(buffer, 0, BUFFER_SIZE);
                 break;
             case CODE_REQUEST_NEW_GAME: {
@@ -284,6 +280,8 @@ void* client_thread(void* arg) {
                 log_event(config.log_file, client_id, CODE_NOTIFY_COMPETITION_JOIN, "Client joined the competition.");
                 pthread_mutex_unlock(&log_mutex);
 
+                is_competing = true; // Set to true when the client joins a competition
+
                 if (is_vip) {
                     sem_post(&vip_semaphore); // Signal that a VIP client is waiting
                     barrier_wait(&room_barrier); // VIP clients wait at the barrier
@@ -302,7 +300,7 @@ void* client_thread(void* arg) {
                     perror("Send competition game");
                 }
 
-                is_competing = true; // Set to true when the client joins a competition
+                //is_competing = true; // Set to true when the client joins a competition
 
                 break;
             case CODE_DISCONNECT:
@@ -311,8 +309,10 @@ void* client_thread(void* arg) {
                 pthread_mutex_lock(&log_mutex);
                 log_event(config.log_file, client_id, CODE_DISCONNECT, "Client disconnected.");
                 pthread_mutex_unlock(&log_mutex);
+                pthread_mutex_lock(&player_count_update_mutex);
                 current_client_ammount--;
                 printf("Current client ammount: %d\n", current_client_ammount);
+                pthread_mutex_unlock(&player_count_update_mutex);
                 memset(buffer, 0, BUFFER_SIZE);
                 close(client_socket);
                 return NULL;
@@ -407,22 +407,21 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        ClientData* client_data = malloc(sizeof(ClientData));
-        if (client_data == NULL) {
-            perror("Failed to allocate memory for client data");
+        int* client_socket_ptr = malloc(sizeof(int));
+        if (client_socket_ptr == NULL) {
+            perror("Failed to allocate memory for client socket");
             close(client_socket);
             sem_post(&client_semaphore);
             continue;
         }
 
-        client_data->client_socket = client_socket;
-        client_data->is_competing = false;
+        *client_socket_ptr = client_socket;
 
         // Create a thread to handle the client
         pthread_t thread_id;
-        if (pthread_create(&thread_id, NULL, client_thread, (void*)client_data) != 0) {
+        if (pthread_create(&thread_id, NULL, client_thread, (void*)client_socket_ptr) != 0) {
             perror("Failed to create thread");
-            free(client_data);
+            free(client_socket_ptr);
             close(client_socket);
             sem_post(&client_semaphore);
             continue;
