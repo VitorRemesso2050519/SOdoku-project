@@ -78,7 +78,7 @@ void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int *num_jogos) {
     *num_jogos = 0;
 
     // Read games from the file
-    while (fscanf(fp, "%d , %s , %s\n", &id, tabuleiro, solucao) != EOF) {
+    while (fscanf(fp, "%d , %81s , %81s\n", &id, tabuleiro, solucao) != EOF) {
         jogos[*num_jogos].id_jogo = id;
         strcpy(jogos[*num_jogos].tabuleiro, tabuleiro);
         strcpy(jogos[*num_jogos].solucao, solucao);

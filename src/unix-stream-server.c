@@ -370,7 +370,7 @@ int main(int argc, char* argv[]) {
     carregarJogos(config.path_jogos, jogos, &num_jogos);
 
     for (int i = 0; i < num_jogos; i++) {
-        printf("Game %d: %s\n", jogos[i].id_jogo, jogos[i].tabuleiro);
+        printf("Game %d: %81s\n", jogos[i].id_jogo, jogos[i].tabuleiro);
     }
 
     // Create a UNIX domain socket
