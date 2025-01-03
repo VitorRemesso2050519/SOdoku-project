@@ -214,7 +214,7 @@ void* client_thread(void* arg) {
                                 // Notify the client that the record update was successful
                                 pthread_mutex_lock(&log_mutex);
                                 log_event(config.log_file, client_id, CODE_NEW_RECORD, "Game statistics updated successfully. New record!");
-                                snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_NEW_RECORD);
+                                snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_NEW_RECORD);
                                 send(client_socket, buffer, strlen(buffer), 0);
                                 pthread_mutex_unlock(&log_mutex);
                             } else {
@@ -222,7 +222,7 @@ void* client_thread(void* arg) {
                                 pthread_mutex_lock(&log_mutex);
                                 log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Failed to update game statistics.");
                                 pthread_mutex_unlock(&log_mutex);
-                                snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_RESPONSE_ERROR);
+                                snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_RESPONSE_ERROR);
                                 send(client_socket, buffer, strlen(buffer), 0);
                             }
                         } else {
@@ -230,7 +230,7 @@ void* client_thread(void* arg) {
                             pthread_mutex_lock(&log_mutex);
                             log_event(config.log_file, client_id, CODE_NOT_RECORD, "New statistics are not better than existing ones.");
                             pthread_mutex_unlock(&log_mutex);
-                            snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_NOT_RECORD);
+                            snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_NOT_RECORD);
                             send(client_socket, buffer, strlen(buffer), 0);
                         }
                     } else {
@@ -349,7 +349,6 @@ int main(int argc, char* argv[]) {
     int server_socket, client_socket;
     struct sockaddr_in server_addr, client_addr;
     socklen_t addr_len = sizeof(client_addr);
-    int client_id;
 
     if (argc < 2) {
         printf("Uso: %s <ficheiro_configuracao>\n", argv[0]);

@@ -59,7 +59,6 @@ int main(int argc, char* argv[]) {
 
         // Original single client mode
         struct sockaddr_in server_addr;
-        pthread_t solver_thread;
         int client_socket;
 
         // Create a socket
@@ -349,7 +348,7 @@ GameData receive_new_game(ConfigCliente* client_config, int thread_socket) {
     buffer[bytes_received] = '\0';
     printf("%d - Received buffer: %s\n", client_config->id_cliente, buffer);
 
-    int response_code = 0, client_id = 0, game_id = 0;
+    int response_code, client_id, game_id;
     char tabuleiro[81];
 
     sscanf(buffer, "%d %d %d %81s", &client_id, &response_code, &game_id, tabuleiro);
@@ -461,7 +460,7 @@ void solve_game_in_increments(GameData* game_data, int client_socket) {
 
     time_t start_time = time(NULL);
     time_t send_time;
-    double elapsed_time;
+    double elapsed_time = 0;
     int response_code;
 
     char number_array[] = {'1','2','3','4','5','6','7','8','9'};
@@ -622,6 +621,13 @@ void solve_game_in_increments(GameData* game_data, int client_socket) {
                 return;
             }
             memset(buffer, 0, BUFFER_SIZE);
+        } else if (response_code == CODE_RESPONSE_INCORRECT_FINAL) {
+            pthread_mutex_lock(&log_mutex);
+            log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_INCORRECT_FINAL, "Final solution is incorrect. Giving up!");
+            pthread_mutex_unlock(&log_mutex);
+            printf("%d - Final solution is incorrect. Giving up!\n", client_config->id_cliente);
+            display_game_status(game_data->tabuleiro, client_config->id_cliente, game_data->id_jogo, elapsed_time, start_time);
+            break;
         } else if (response_code == CODE_NOTIFY_COMPETITION_WINNER) {
             printf("%d - You have won the competition. Congratulations!\n", client_config->id_cliente);
             pthread_mutex_lock(&log_mutex);
