@@ -554,6 +554,9 @@ void solve_game_in_increments(GameData* game_data, int client_socket) {
             log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_CORRECT_PARTIAL, "Partial solution is correct.");
             pthread_mutex_unlock(&log_mutex);
         } else if (response_code == CODE_RESPONSE_INCORRECT_PARTIAL) {
+            pthread_mutex_lock(&log_mutex);
+            log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_INCORRECT_PARTIAL, "Partial solution is incorrect.");
+            pthread_mutex_unlock(&log_mutex);
             int errors = 0;
             sscanf(buffer, "%d %d %d", &client_id, &response_code, &errors);
             
@@ -565,6 +568,11 @@ void solve_game_in_increments(GameData* game_data, int client_socket) {
 
             for (int i = 0; i < errors; i++) {
                 int pos = atoi(token);
+                pthread_mutex_lock(&log_mutex);
+                char message[100]; // Allocate enough space for the message
+                snprintf(message, sizeof(message), "Server says position %d is incorrect, marking it as 0 now.", pos);
+                log_event(client_config->log_file, client_config->id_cliente, CODE_WRONG_NUMBER, message);
+                pthread_mutex_unlock(&log_mutex);
                 game_data->tabuleiro[pos] = '0';
                 token = strtok(NULL, " ");
                 
@@ -581,9 +589,6 @@ void solve_game_in_increments(GameData* game_data, int client_socket) {
                 }
             }
             display_game_status(game_data->tabuleiro, client_config->id_cliente, game_data->id_jogo, elapsed_time, start_time);
-            pthread_mutex_lock(&log_mutex);
-            log_event(client_config->log_file, client_config->id_cliente, CODE_RESPONSE_INCORRECT_PARTIAL, "Partial solution is incorrect.");
-            pthread_mutex_unlock(&log_mutex);
             filled_positions -= errors; // Rollback the filled positions
         } else if (response_code == CODE_RESPONSE_CORRECT_FINAL) {
             pthread_mutex_lock(&log_mutex);
