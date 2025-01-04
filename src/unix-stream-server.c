@@ -111,8 +111,22 @@ void* client_thread(void* arg) {
                 for (int i = 0; i < n_posicoes; i++) {
                     int pos = atoi(token);
                     token = strtok(NULL, " ");
+                    if (token == NULL) {
+                        printf("%d - Error parsing buffer: expected more tokens\n", client_id);
+                        snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_RESPONSE_ERROR);
+                        send(client_socket, buffer, strlen(buffer), 0);
+                        memset(buffer, 0, BUFFER_SIZE);
+                        return NULL;
+                    }
                     int num = atoi(token);
                     token = strtok(NULL, " ");
+                    if (token == NULL) {
+                        printf("%d - Error parsing buffer: expected more tokens\n", client_id);
+                        snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_RESPONSE_ERROR);
+                        send(client_socket, buffer, strlen(buffer), 0);
+                        memset(buffer, 0, BUFFER_SIZE);
+                        return NULL;
+                    }
                     posicoes[i] = pos;
                     numeros[i] = num + '0'; // Convert integer to character
                     printf("Parsed position and number: posicoes[%d]=%d, numeros[%d]=%c\n", i, posicoes[i], i, numeros[i]);
@@ -252,31 +266,6 @@ void* client_thread(void* arg) {
                 memset(buffer, 0, BUFFER_SIZE);
                 break;
             }
-            case CODE_REQUEST_STATS: {
-                // Handle game state request, not being used in the current implementation
-                pthread_mutex_lock(&log_mutex);
-                log_event(config.log_file, client_id, CODE_REQUEST_STATS, "Client requested game statistics.");
-                pthread_mutex_unlock(&log_mutex);
-                JogoState jogoState;
-                if (lerEstatisticasJogo("data/jogos_stats.txt", game_id, &jogoState)) {
-                    char record_time_str[9];
-                    strftime(record_time_str, sizeof(record_time_str), "%H:%M:%S", localtime(&jogoState.record_time));
-                    snprintf(buffer, BUFFER_SIZE, "%d %d %d %s %d", client_id, CODE_RESPONSE_STATS, jogoState.id_jogo, record_time_str, jogoState.attempts);
-                    pthread_mutex_lock(&log_mutex);
-                    log_event(config.log_file, client_id, CODE_RESPONSE_STATS, "Server responded with game statistics.");
-                    pthread_mutex_unlock(&log_mutex);
-                } else {
-                    snprintf(buffer, BUFFER_SIZE, "%d %d %d", client_id, CODE_RESPONSE_STATS, -1);
-                    pthread_mutex_lock(&log_mutex);
-                    log_event(config.log_file, client_id, CODE_RESPONSE_ERROR, "Game statistics not found.");
-                    pthread_mutex_unlock(&log_mutex);
-                }
-                if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
-                    perror("Send game statistics");
-                }
-                memset(buffer, 0, BUFFER_SIZE);
-                break;
-            }
             case CODE_REQUEST_COMPETITION_JOIN:
                 // Handle competition join request
                 sscanf(buffer, "%d %d %d", &client_id, &message_code, &is_vip);
@@ -294,11 +283,11 @@ void* client_thread(void* arg) {
 
                 is_competing = true; // Set to true when the client joins a competition
 
-                if (is_vip) {
+                if (is_vip == 1) {
                     printf("%d - VIP client is waiting at the barrier.\n", client_id);
                     sem_post(&vip_semaphore); // Signal that a VIP client is waiting
                     barrier_wait(&room_barrier); // VIP clients wait at the barrier
-                } else {
+                } else if (is_vip == 0) {
                     printf("%d - Normal client is waiting at the barrier.\n", client_id);
                     sem_post(&normal_semaphore); // Signal that a normal client is waiting
                     // Wait for all VIP clients to pass
@@ -447,8 +436,18 @@ int main(int argc, char* argv[]) {
     // Clean up the semaphore
     sem_destroy(&client_semaphore);
 
-    // Destroy the mutex for logs
+    sem_destroy(&vip_semaphore);
+
+    sem_destroy(&normal_semaphore);
+
+    // Destroy the mutexes
     pthread_mutex_destroy(&log_mutex);
+
+    pthread_mutex_destroy(&record_mutex);
+
+    pthread_mutex_destroy(&competition_mutex);
+
+    pthread_mutex_destroy(&player_count_update_mutex);
 
     // Close the server socket
     close(server_socket);

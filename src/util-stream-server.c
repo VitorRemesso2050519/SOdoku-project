@@ -8,20 +8,21 @@
 #include <semaphore.h>
 #include <stdbool.h>
 
-// Definir a estrutura de configuração do servidor
+// Server configuration structure
 typedef struct {
-    char path_jogos[256];  // Caminho para o ficheiro de jogos
-    char log_file[256];    // Caminho para o ficheiro de log
-    char path_stats[256];  // Caminho para o ficheiro de estatísticas
-    int max_clients;       // Número máximo de clientes suportados
-    int room_size;         // Tamanho da sala de competição
+    char path_jogos[256];  // Path to the game file
+    char log_file[256];    // Path to log file
+    char path_stats[256];  // Path to statistics file
+    int max_clients;       // Maximum number of supported clients
+    int room_size;         // Competition room size
 } ConfigServidor;
 
-// Definir a estrutura de um jogo
+// Game structure
 typedef struct {
-    int id_jogo;
-    char tabuleiro[81];  // Grelha 9x9 linearizada
-    char solucao[81];    // Solução correspondente
+    int id_jogo;           // Game identifier
+    char tabuleiro[81];    // Board layout as a 9x9 grid in a single string
+    int separator;         // Uninitialized separator variable, C is stupid like that
+    char solucao[81];      // Corresponding solution grid
 } Jogo;
 
 // Game state structure

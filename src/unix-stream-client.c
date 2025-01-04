@@ -149,15 +149,18 @@ int main(int argc, char* argv[]) {
         // Multi-client mode
         int num_clients = atoi(argv[2]);
         char* mode = argv[3];
+        int random_increment;
+        char message[100];
+        //srand(time(NULL));
         
         // Validate the mode
-        if (mode == NULL || (strcmp(mode, "singleplayer") != 0 && strcmp(mode, "multiplayer") != 0 && strcmp(mode, "incrementaltest") != 0)) {
+        if (mode == NULL || (strcmp(mode, "singleplayer") != 0 && strcmp(mode, "multiplayer") != 0 && strcmp(mode, "incrementaltest") != 0 && strcmp(mode, "timetest") != 0)) {
             printf("Invalid mode.\n");
             return 1;
         }
 
         // Validate the number of clients
-        if (num_clients < 2) {
+        if (num_clients < 2 && (strcmp(mode, "multiplayer") == 0 || strcmp(mode, "timetest") == 0 || strcmp(mode, "incrementaltest") == 0)) {
             printf("Number of clients must be at least 2.\n");
             return 1;
         }
@@ -167,7 +170,18 @@ int main(int argc, char* argv[]) {
             num_clients = 81;
         }
 
+        if (strcmp(mode, "timetest") == 0) {
+            random_increment = rand() % 81 + 1;
+            printf("Random increment: %d\n", random_increment);
+            snprintf(message, BUFFER_SIZE, "Random increment generated for time test: %d", random_increment);
+            log_event("logs/common.log", 0, CODE_SIMULATION_DATA, message);
+            memset(message, 0, 100);
+        }
+
         printf("Creating %d clients in %s mode.\n", num_clients, mode); //Debug print
+        snprintf(message, BUFFER_SIZE, "Creating %d clients in %s mode.", num_clients, mode);
+        log_event("logs/common.log", 0, CODE_SIMULATION_DATA, message);
+        memset(message, 0, 100);
 
         pthread_t threads[num_clients];
 
@@ -187,6 +201,12 @@ int main(int argc, char* argv[]) {
                 strcpy(client_config->log_file, "logs/common.log");
                 client_config->is_vip = 0; // Everyone is a normal client for incremental testing
                 client_config->partial_num = i + 1; // Partial number is the client number
+            } else if (strcmp(mode, "timetest") == 0) {
+                client_config->id_cliente = i + 1;
+                strcpy(client_config->server_ip, "127.0.0.1");
+                strcpy(client_config->log_file, "logs/common.log");
+                client_config->is_vip = 0; // Everyone is a normal client for time testing
+                client_config->partial_num = random_increment; // Randomized between 1 and 81 but once for all clients
             } else {
                 client_config->id_cliente = i + 1;
                 strcpy(client_config->server_ip, "127.0.0.1");
@@ -289,7 +309,7 @@ void* multi_client_thread(void* arg) {
     if (strcmp(mode, "singleplayer") == 0) {
         printf("%d - Requesting new game in singleplayer mode.\n", client_config->id_cliente);
         request_new_game(client_config, thread_socket);
-    } else if (strcmp(mode, "multiplayer") == 0 || strcmp(mode, "incrementaltest") == 0) {
+    } else if (strcmp(mode, "multiplayer") == 0 || strcmp(mode, "incrementaltest") == 0 || strcmp(mode, "timetest") == 0) {
         printf("%d - Joining multiplayer game.\n", client_config->id_cliente);
         multiplayerpvp(client_config, thread_socket);
     } else {
@@ -425,7 +445,7 @@ void multiplayerpvp(ConfigCliente* client_config, int thread_socket) {
 
     sscanf(buffer, "%d %d %d %81s", &client_id, &response_code, &game_id, tabuleiro);
     if(response_code == CODE_NOTIFY_COMPETITION_START){
-        printf("Competition has started.\n");
+        printf("%d - Competition has started.\n", client_id);
         pthread_mutex_lock(&log_mutex);
         log_event(client_config->log_file, client_config->id_cliente, CODE_NOTIFY_COMPETITION_START, "Competition has started.");
         pthread_mutex_unlock(&log_mutex);
@@ -463,7 +483,7 @@ void solve_game_in_increments(GameData* game_data, int client_socket) {
     double elapsed_time = 0;
     int response_code;
 
-    char number_array[] = {'1','2','3','4','5','6','7','8','9'};
+    char number_array[9] = {'1','2','3','4','5','6','7','8','9'};
     shuffle(number_array, 9);
     bool attempted_numbers[81][9] = {false};
     display_game_status(game_data->tabuleiro, client_config->id_cliente, game_data->id_jogo, elapsed_time, start_time);
@@ -657,7 +677,7 @@ void solve_game_in_increments(GameData* game_data, int client_socket) {
             return;
         }
 
-    } while (response_code != CODE_RESPONSE_CORRECT_FINAL && response_code != CODE_NOTIFY_COMPETITION_WINNER && response_code != CODE_NOTIFY_COMPETITION_END);  
+    } while (response_code != CODE_RESPONSE_CORRECT_FINAL && response_code != CODE_RESPONSE_INCORRECT_FINAL && response_code != CODE_NOTIFY_COMPETITION_WINNER && response_code != CODE_NOTIFY_COMPETITION_END);  
     memset(buffer, 0, BUFFER_SIZE);
 }
 

@@ -9,14 +9,11 @@
 #define CODE_REQUEST_NEW_GAME 10            // Client requests a new Sudoku board
 #define CODE_SEND_PARTIAL_SOLUTION 20       // Client submits a partial solution for verification
 #define CODE_SEND_FINAL_SOLUTION 21         // Client submits a complete solution for verification
-#define CODE_REQUEST_STATS 30               // Client requests game statistics, such as fastest completion time or records
 #define CODE_DISCONNECT 99                  // Client requests to disconnect from the server
 
 // Server-Side Codes
 #define CODE_RESPONSE_NEW_GAME 100          // Server sends a new game board to the client
-#define CODE_RESPONSE_GAME_STATE 101        // Server provides the current game state to the client
 #define CODE_RESPONSE_DISCONNECT 666        // Server acknowledges client disconnection
-#define CODE_RESPONSE_STATS 102             // Server provides the requested game statistics to the client
 #define CODE_RESPONSE_OK 200                // Server responds indicating a successful operation
 #define CODE_NEW_RECORD 201                 // Server notifies the client of a new record
 #define CODE_NOT_RECORD 202                 // Server notifies the client that the submitted time is not a record
@@ -35,7 +32,7 @@
 #define CODE_NOTIFY_COMPETITION_END 139     // Server notifies the client that the competition has ended
 
 // Error and Control Codes
-#define CODE_RESPONSE_INVALID_COMMAND 404   // Server notifies the client of an unrecognized or unsupported command
+#define CODE_SIMULATION_DATA 420            // Client writes down simulation data
 #define CODE_RESPONSE_ERROR 500             // Server indicates an error occurred during the operation
 #define CODE_SERVER_SHUTDOWN 999            // Server signals impending shutdown to all connected clients
 

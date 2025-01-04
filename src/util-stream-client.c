@@ -9,7 +9,7 @@ typedef struct {
     int id_cliente;        // Client identifier
     char server_ip[16];    // Server IP address
     char log_file[256];    // Path to log file
-    bool is_vip;           // Flag to see if client is VIP
+    int is_vip;            // Flag to see if client is VIP
     int partial_num;       // Number of positions to fill before sending partial solution
 } ConfigCliente;
 
@@ -62,7 +62,7 @@ bool ehValido(const char tabuleiro[81], int pos, char num) {
 }
 
 // Function to fill a position with a valid number
-bool preencherPosicao(char* tabuleiro, int pos, char num) {
+bool preencherPosicao(char tabuleiro[81], int pos, char num) {
     if (tabuleiro[pos] != '0') {
         return false;
     }
@@ -74,7 +74,7 @@ bool preencherPosicao(char* tabuleiro, int pos, char num) {
 }
 
 // Function to shuffle an array of characters
-void shuffle(char *array, int n) {
+void shuffle(char array[9], int n) {
     for (int i = n - 1; i > 0; i--) {
         int j = rand() % (i + 1);
         char temp = array[i];

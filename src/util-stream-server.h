@@ -18,6 +18,7 @@ typedef struct {
 typedef struct {
     int id_jogo;           // Game identifier
     char tabuleiro[81];    // Board layout as a 9x9 grid in a single string
+    int separator;         // Uninitialized separator variable, C is stupid like that
     char solucao[81];      // Corresponding solution grid
 } Jogo;
 
@@ -48,7 +49,7 @@ void carregarJogos(const char* ficheiroJogos, Jogo jogos[], int* num_jogos);
 int verificarJogoCompleto(char tabuleiro[81], char solucao_correta[81]);
 
 // Function to verify if a specific position is correct
-bool verificarPosicao(char tabuleiro[81], int pos, char solucao_correta[81]);
+bool verificarPosicao(char num, int pos, char solucao_correta[81]);
 
 // Function to randomly select a game
 Jogo grabRandomGame(Jogo jogos[], int num_jogos);
