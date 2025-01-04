@@ -28,8 +28,8 @@ void* client_thread(void* arg) {
     int client_socket = *(int*)arg;
     free(arg);
     bool is_competing = false;
-    int client_id, message_code, game_id, n_posicoes, errors, attempts, is_vip;
-    char buffer[BUFFER_SIZE], tabuleiro[81], numeros[81], posicoes[81], error_positions[81];
+    int client_id, message_code, game_id, n_posicoes, errors, attempts, is_vip, offset, pos, posicoes[81];
+    char buffer[BUFFER_SIZE], tabuleiro[81], numeros[81], num, error_positions[81];
     double record_time;
     Jogo game;
     ssize_t bytes_received;
@@ -38,6 +38,7 @@ void* client_thread(void* arg) {
         // This was just a message to test if someone was a competitor or not, leaving it here just in case.
         //printf(is_competing ? "Is a competitor.\n" : "Is not a competitor.\n");
         bool partial_correct = true;
+        offset = 0;
         // Receive message
         bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
         if (bytes_received == -1) {
@@ -89,6 +90,8 @@ void* client_thread(void* arg) {
                 sscanf(buffer, "%d %d %d %d", &client_id, &message_code, &game_id, &n_posicoes);
                 printf("Parsed values: client_id=%d, message_code=%d, game_id=%d, n_posicoes=%d\n", client_id, message_code, game_id, n_posicoes);
 
+                offset = snprintf(NULL, 0, "%d %d %d %d", client_id, message_code, game_id, n_posicoes) + 1; // +1 for the space after n_posicoes
+
                 // Validate game_id
                 if (game_id < 0 || game_id > num_jogos) {
                     printf("Invalid game_id: %d\n", game_id);
@@ -102,40 +105,22 @@ void* client_thread(void* arg) {
                 game = jogos[game_id-1];
                 printf("Game solution: %s\n", game.solucao); // Debug print
 
-                // Use n_positions to read the positions and numbers from the buffer
-                char* token = strtok(buffer, " ");
-                for (int i = 0; i < 4; i++) {
-                    token = strtok(NULL, " "); // Skip the first four values
-                }
-
+                // Use sscanf to read the positions and numbers from the buffer
                 for (int i = 0; i < n_posicoes; i++) {
-                    int pos = atoi(token);
-                    token = strtok(NULL, " ");
-                    if (token == NULL) {
-                        printf("%d - Error parsing buffer: expected more tokens\n", client_id);
-                        snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_RESPONSE_ERROR);
-                        send(client_socket, buffer, strlen(buffer), 0);
-                        memset(buffer, 0, BUFFER_SIZE);
-                        return NULL;
+                    if (i == n_posicoes - 1) {
+                        sscanf(buffer + offset, "%d %c", &pos, &num);
+                    } else {
+                        sscanf(buffer + offset, "%d %c ", &pos, &num);
                     }
-                    int num = atoi(token);
-                    token = strtok(NULL, " ");
-                    if (token == NULL) {
-                        printf("%d - Error parsing buffer: expected more tokens\n", client_id);
-                        snprintf(buffer, BUFFER_SIZE, "%d %d", client_id, CODE_RESPONSE_ERROR);
-                        send(client_socket, buffer, strlen(buffer), 0);
-                        memset(buffer, 0, BUFFER_SIZE);
-                        return NULL;
-                    }
+                    offset += snprintf(NULL, 0, "%d %c", pos, num) + 1; // +1 for the space after n_posicoes
                     posicoes[i] = pos;
-                    numeros[i] = num + '0'; // Convert integer to character
-                    printf("Parsed position and number: posicoes[%d]=%d, numeros[%d]=%c\n", i, posicoes[i], i, numeros[i]);
+                    numeros[i] = num;
                 }
 
                 // Validate partial solution
                 errors = 0;
                 for (int i = 0; i < n_posicoes; i++) {
-                    printf("Checking position %d with number %c\n", posicoes[i], numeros[i]);
+                    //printf("%d - Checking position %d with number %c\n", client_id, posicoes[i], numeros[i]);
                     if (!verificarPosicao(numeros[i], posicoes[i], game.solucao)) {
                         partial_correct = false;
                         error_positions[errors] = posicoes[i];
@@ -159,7 +144,7 @@ void* client_thread(void* arg) {
                     log_event(config.log_file, client_id, CODE_RESPONSE_INCORRECT_PARTIAL, "Partial solution is incorrect.");
                     pthread_mutex_unlock(&log_mutex);
                 }
-                printf("Sending response: %s\n", buffer); // Debug print
+                printf("%d - Sending response: %s\n", client_id, buffer); // Debug print
                 send(client_socket, buffer, strlen(buffer), 0);
                 memset(buffer, 0, BUFFER_SIZE);
                 break;

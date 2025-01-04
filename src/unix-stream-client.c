@@ -579,22 +579,19 @@ void solve_game_in_increments(GameData* game_data, int client_socket) {
             pthread_mutex_unlock(&log_mutex);
             int errors = 0;
             sscanf(buffer, "%d %d %d", &client_id, &response_code, &errors);
-            
-            // Use strtok to parse the buffer
-            char* token = strtok(buffer, " ");
-            for (int i = 0; i < 3; i++) {
-                token = strtok(NULL, " "); // Skip the first three values
-            }
 
+            int offset = snprintf(NULL, 0, "%d %d %d", client_id, response_code, errors) + 1; // +1 for the space after n_posicoes;
+            int pos;
             for (int i = 0; i < errors; i++) {
-                int pos = atoi(token);
+                sscanf(buffer + offset, "%d", &pos);
+                offset += snprintf(NULL, 0, "%d", pos) + 1; // +1 for the space after the number
                 pthread_mutex_lock(&log_mutex);
                 char message[100]; // Allocate enough space for the message
                 snprintf(message, sizeof(message), "Server says position %d is incorrect, marking it as 0 now.", pos);
                 log_event(client_config->log_file, client_config->id_cliente, CODE_WRONG_NUMBER, message);
                 pthread_mutex_unlock(&log_mutex);
+                //printf("%d - Server says position %d is incorrect, marking it as 0 now.\n", client_config->id_cliente, pos);
                 game_data->tabuleiro[pos] = '0';
-                token = strtok(NULL, " ");
                 
                 for (int j = 0; j < positions_filled_this_round; j++) {
                     if (positions[j] == pos) {
