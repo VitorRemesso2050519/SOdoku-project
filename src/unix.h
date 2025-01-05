@@ -28,7 +28,7 @@
 #define CODE_REQUEST_COMPETITION_JOIN 41    // Client requests to join a competitive multiplayer game
 #define CODE_NOTIFY_COMPETITION_JOIN 130    // Server notifies the client that they have joined a multiplayer game
 #define CODE_NOTIFY_COMPETITION_START 131   // Server notifies the client when the game starts
-#define CODE_NOTIFY_COMPETITION_WINNER 138  // Server announces the winner of a multiplayer game, therefore ending competition
+#define CODE_NOTIFY_COMPETITION_WINNER 138  // Server notifies the winner of a multiplayer game, therefore ending competition for others
 #define CODE_NOTIFY_COMPETITION_END 139     // Server notifies the client that the competition has ended
 
 // Error and Control Codes
