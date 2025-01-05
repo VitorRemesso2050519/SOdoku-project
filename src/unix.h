@@ -33,8 +33,8 @@
 
 // Error and Control Codes
 #define CODE_SIMULATION_DATA 420            // Client writes down simulation data
-#define CODE_RESPONSE_ERROR 404            // Server indicates an error occurred during the operation
-#define CODE_RESPONSE_OK 69               // Server responds indicating a successful operation
+#define CODE_RESPONSE_ERROR 404             // Server indicates an error occurred during the operation
+#define CODE_RESPONSE_OK 69                 // Server responds indicating a successful operation
 
 // Game Board Operations
 #define CODE_FILL_POSITION 50               // Client fills a position in the Sudoku board
