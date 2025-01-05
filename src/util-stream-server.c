@@ -35,11 +35,11 @@ typedef struct {
 
 // Barrier structure
 typedef struct {
-    sem_t mutex;           // Mutex semaphore
-    sem_t turnstile1;      // Turnstile 1 semaphore
-    sem_t turnstile2;      // Turnstile 2 semaphore
-    int count;             // Counter
-    int num_threads;       // Number of threads
+    sem_t mutex;           // Mutex semaphore semaphore to protect the count variable
+    sem_t turnstile1;      // Turnstile 1 semaphore to block clients until all have arrived
+    sem_t turnstile2;      // Turnstile 2 semaphore to block clients until the first turnstile is reset
+    int count;             // Counter to keep track of the number of clients that have reached the barrier
+    int num_clients;       // Total number of clients that need to reach the barrier
 } Barrier;
 
 // Function to read server configuration from a file
@@ -193,19 +193,19 @@ Jogo grabRandomGame(Jogo jogos[], int num_jogos){
 }
 
 // Function to initialize a barrier
-void barrier_init(Barrier* barrier, int num_threads) {
+void barrier_init(Barrier* barrier, int num_clients) {
     sem_init(&barrier->mutex, 0, 1);
     sem_init(&barrier->turnstile1, 0, 0);
     sem_init(&barrier->turnstile2, 0, 1);
     barrier->count = 0;
-    barrier->num_threads = num_threads;
+    barrier->num_clients = num_clients;
 }
 
 // Function to wait on a barrier
 void barrier_wait(Barrier* barrier) {
     sem_wait(&barrier->mutex);
     barrier->count++;
-    if (barrier->count == barrier->num_threads) {
+    if (barrier->count == barrier->num_clients) {
         sem_wait(&barrier->turnstile2);
         sem_post(&barrier->turnstile1);
     }

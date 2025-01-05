@@ -24,7 +24,7 @@ int num_jogos = 0;
 int current_client_ammount = 0;
 bool competition_winner = false;
 
-void* client_thread(void* arg) {
+void* client_handler(void* arg) {
     int client_socket = *(int*)arg;
     free(arg);
     bool is_competing = false;
@@ -406,7 +406,7 @@ int main(int argc, char* argv[]) {
 
         // Create a thread to handle the client
         pthread_t thread_id;
-        if (pthread_create(&thread_id, NULL, client_thread, (void*)client_socket_ptr) != 0) {
+        if (pthread_create(&thread_id, NULL, client_handler, (void*)client_socket_ptr) != 0) {
             perror("Failed to create thread");
             free(client_socket_ptr);
             close(client_socket);
