@@ -194,34 +194,36 @@ Jogo grabRandomGame(Jogo jogos[], int num_jogos){
 
 // Function to initialize a barrier
 void barrier_init(Barrier* barrier, int num_clients) {
-    sem_init(&barrier->mutex, 0, 1);
-    sem_init(&barrier->turnstile1, 0, 0);
-    sem_init(&barrier->turnstile2, 0, 1);
-    barrier->count = 0;
-    barrier->num_clients = num_clients;
+    sem_init(&barrier->mutex, 0, 1); // Initialize the mutex semaphore to 1, used for mutual exclusion
+    sem_init(&barrier->turnstile1, 0, 0); // Initialize turnstile1 semaphore to 0, controls the first phase of synchronization
+    sem_init(&barrier->turnstile2, 0, 1); // Initialize turnstile2 semaphore to 1, controls the second phase of synchronization
+    barrier->count = 0; // Set the initial count of threads at the barrier to 0
+    barrier->num_clients = num_clients; // Set the total number of clients (threads) for the barrier
 }
 
 // Function to wait on a barrier
 void barrier_wait(Barrier* barrier) {
-    sem_wait(&barrier->mutex);
-    barrier->count++;
-    if (barrier->count == barrier->num_clients) {
-        sem_wait(&barrier->turnstile2);
-        sem_post(&barrier->turnstile1);
+    // Phase 1: Threads wait until all have reached the barrier
+    sem_wait(&barrier->mutex); // Lock the mutex for mutual exclusion
+    barrier->count++; // Increment the count of threads at the barrier
+    if (barrier->count == barrier->num_clients) { // If all threads have arrived
+        sem_wait(&barrier->turnstile2); // Close turnstile2 to block threads leaving phase 2
+        sem_post(&barrier->turnstile1); // Open turnstile1 to allow threads to pass phase 1
     }
-    sem_post(&barrier->mutex);
+    sem_post(&barrier->mutex); // Release the mutex
 
-    sem_wait(&barrier->turnstile1);
-    sem_post(&barrier->turnstile1);
+    sem_wait(&barrier->turnstile1); // Wait at turnstile1
+    sem_post(&barrier->turnstile1); // Pass through turnstile1
 
-    sem_wait(&barrier->mutex);
-    barrier->count--;
-    if (barrier->count == 0) {
-        sem_wait(&barrier->turnstile1);
-        sem_post(&barrier->turnstile2);
+    // Phase 2: Threads wait until all have left the barrier
+    sem_wait(&barrier->mutex); // Lock the mutex for mutual exclusion
+    barrier->count--; // Decrement the count of threads at the barrier
+    if (barrier->count == 0) { // If all threads have left
+        sem_wait(&barrier->turnstile1); // Close turnstile1 for the next use
+        sem_post(&barrier->turnstile2); // Open turnstile2 to allow threads to pass phase 2
     }
-    sem_post(&barrier->mutex);
+    sem_post(&barrier->mutex); // Release the mutex
 
-    sem_wait(&barrier->turnstile2);
-    sem_post(&barrier->turnstile2);
+    sem_wait(&barrier->turnstile2); // Wait at turnstile2
+    sem_post(&barrier->turnstile2); // Pass through turnstile2
 }
